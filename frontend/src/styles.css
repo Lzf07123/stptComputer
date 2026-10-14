@@ -177,6 +177,17 @@ body {
 /* ---------- 答题 ---------- */
 .quiz-wrap { max-width: 680px; margin: 0 auto; }
 .quiz-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+.diff-tag {
+  margin-left: 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1px 6px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.diff-tag.d-容易 { color: var(--green); border-color: var(--green); }
+.diff-tag.d-简单 { color: var(--gold); border-color: var(--gold); }
+.diff-tag.d-困难 { color: var(--red); border-color: var(--red); }
 .timer {
   font-family: var(--font-retro);
   font-size: 40px;
@@ -230,6 +241,19 @@ input, textarea {
   width: 100%;
 }
 input:focus, textarea:focus { outline: none; border-color: var(--blue); }
+select {
+  background: #0b1120;
+  border: 2px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  padding: 10px 12px;
+  font-size: 15px;
+  width: 100%;
+}
+.qdiff { font-style: normal; font-size: 11px; border: 1px solid var(--border); border-radius: 4px; padding: 0 5px; margin-right: 6px; color: var(--muted); }
+.qdiff.d-容易 { color: var(--green); border-color: var(--green); }
+.qdiff.d-简单 { color: var(--gold); border-color: var(--gold); }
+.qdiff.d-困难 { color: var(--red); border-color: var(--red); }
 
 /* ---------- 结果 ---------- */
 .result-wrap { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; max-width: 900px; margin: 0 auto; }

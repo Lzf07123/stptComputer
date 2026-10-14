@@ -1,20 +1,25 @@
 CREATE TABLE IF NOT EXISTS users (
-    id         BIGSERIAL PRIMARY KEY,
-    nickname   TEXT NOT NULL,
-    token      TEXT NOT NULL UNIQUE,
-    device_fp  TEXT NOT NULL DEFAULT '',
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    id            BIGSERIAL PRIMARY KEY,
+    nickname      TEXT NOT NULL,
+    token         TEXT NOT NULL UNIQUE,
+    device_fp     TEXT NOT NULL DEFAULT '',
+    current_round INT NOT NULL DEFAULT 0,
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+ALTER TABLE users ADD COLUMN IF NOT EXISTS current_round INT NOT NULL DEFAULT 0;
+UPDATE users u SET current_round = (SELECT COALESCE(MAX(round_no), 0) FROM attempts a WHERE a.user_id = u.id);
 
 CREATE TABLE IF NOT EXISTS questions (
-    id      BIGSERIAL PRIMARY KEY,
-    content TEXT NOT NULL,
-    options JSONB NOT NULL,
-    answer  INT NOT NULL,
-    score   INT NOT NULL DEFAULT 10,
-    sort    INT NOT NULL DEFAULT 0,
-    active  BOOLEAN NOT NULL DEFAULT TRUE
+    id         BIGSERIAL PRIMARY KEY,
+    content    TEXT NOT NULL,
+    options    JSONB NOT NULL,
+    answer     INT NOT NULL,
+    score      INT NOT NULL DEFAULT 10,
+    sort       INT NOT NULL DEFAULT 0,
+    active     BOOLEAN NOT NULL DEFAULT TRUE,
+    difficulty TEXT NOT NULL DEFAULT '简单'
 );
+ALTER TABLE questions ADD COLUMN IF NOT EXISTS difficulty TEXT NOT NULL DEFAULT '简单';
 
 CREATE TABLE IF NOT EXISTS attempts (
     id          BIGSERIAL PRIMARY KEY,
@@ -24,8 +29,10 @@ CREATE TABLE IF NOT EXISTS attempts (
     correct     BOOLEAN NOT NULL,
     score       INT NOT NULL DEFAULT 0,
     request_id  TEXT NOT NULL UNIQUE,
+    round_no    INT NOT NULL DEFAULT 1,
     created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+ALTER TABLE attempts ADD COLUMN IF NOT EXISTS round_no INT NOT NULL DEFAULT 1;
 CREATE INDEX IF NOT EXISTS idx_attempts_user ON attempts(user_id);
 
 CREATE TABLE IF NOT EXISTS qrcodes (
@@ -43,9 +50,11 @@ CREATE TABLE IF NOT EXISTS announcements (
 );
 
 CREATE TABLE IF NOT EXISTS quiz_state (
-    id    INT PRIMARY KEY,
-    state TEXT NOT NULL DEFAULT 'stop'
+    id         INT PRIMARY KEY,
+    state      TEXT NOT NULL DEFAULT 'stop',
+    difficulty TEXT NOT NULL DEFAULT '全部'
 );
+ALTER TABLE quiz_state ADD COLUMN IF NOT EXISTS difficulty TEXT NOT NULL DEFAULT '全部';
 INSERT INTO quiz_state (id, state) VALUES (1, 'stop') ON CONFLICT (id) DO NOTHING;
 
 CREATE TABLE IF NOT EXISTS backgrounds (

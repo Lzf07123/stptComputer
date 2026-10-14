@@ -48,7 +48,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/config", s.handleConfig)
 
 	// 需 token
-	mux.HandleFunc("GET /api/questions", s.withUser(s.handleQuestions))
+	mux.HandleFunc("POST /api/quiz/round", s.withUser(s.handleStartRound))
+	mux.HandleFunc("GET /api/quiz/current", s.withUser(s.handleCurrentRound))
 	mux.HandleFunc("POST /api/answer", s.withUser(s.handleAnswer))
 	mux.HandleFunc("GET /api/me", s.withUser(s.handleMe))
 
@@ -57,6 +58,7 @@ func (s *Server) Handler() http.Handler {
 
 	// 后台（X-Admin-Token）
 	mux.HandleFunc("POST /api/admin/quiz-state", s.withAdmin(s.handleAdminState))
+	mux.HandleFunc("POST /api/admin/difficulty", s.withAdmin(s.handleAdminDifficulty))
 	mux.HandleFunc("POST /api/admin/announce", s.withAdmin(s.handleAdminAnnounce))
 	mux.HandleFunc("POST /api/admin/effect", s.withAdmin(s.handleAdminEffect))
 	mux.HandleFunc("POST /api/admin/qrcode", s.withAdmin(s.handleAdminQrcode))
@@ -176,31 +178,54 @@ func (s *Server) handleSession(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "请求体格式错误")
 		return
 	}
-	u, err := s.svc.StartSession(r.Context(), req.Nickname, req.DeviceFP)
+	u, recovered, err := s.svc.StartSession(r.Context(), req.Nickname, req.DeviceFP)
 	if err != nil {
 		writeErr(w, http.StatusBadRequest, err.Error())
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"user_id":  u.ID,
-		"token":    u.Token,
-		"nickname": u.Nickname,
+		"user_id":   u.ID,
+		"token":     u.Token,
+		"nickname":  u.Nickname,
+		"recovered": recovered,
 	})
 }
 
-func (s *Server) handleQuestions(w http.ResponseWriter, r *http.Request, u *store.User) {
-	limit := s.cfg.QuizCount
-	if limit <= 0 {
-		limit = 10
+func (s *Server) quizLimit() int {
+	if s.cfg.QuizCount <= 0 {
+		return 10
 	}
-	qs, err := s.svc.Questions(r.Context(), u.ID, limit)
+	return s.cfg.QuizCount
+}
+
+func (s *Server) handleStartRound(w http.ResponseWriter, r *http.Request, u *store.User) {
+	roundNo, qs, err := s.svc.StartRound(r.Context(), u.ID, s.quizLimit())
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
+		"round_no":         roundNo,
 		"questions":        qs,
 		"question_seconds": s.cfg.QuestionSeconds,
+	})
+}
+
+func (s *Server) handleCurrentRound(w http.ResponseWriter, r *http.Request, u *store.User) {
+	roundNo, qs, answered, err := s.svc.CurrentRound(r.Context(), u.ID, s.quizLimit())
+	if errors.Is(err, quiz.ErrNoRound) {
+		writeErr(w, http.StatusNotFound, err.Error())
+		return
+	}
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"round_no":         roundNo,
+		"questions":        qs,
+		"question_seconds": s.cfg.QuestionSeconds,
+		"answered":         answered,
 	})
 }
 
@@ -217,6 +242,9 @@ func (s *Server) handleAnswer(w http.ResponseWriter, r *http.Request, u *store.U
 	att, correctIdx, duplicate, err := s.svc.Submit(r.Context(), u.ID, req.RequestID, req.QuestionID, req.Selected)
 	switch {
 	case errors.Is(err, quiz.ErrQuizNotStarted):
+		writeErr(w, http.StatusConflict, err.Error())
+		return
+	case errors.Is(err, quiz.ErrNoRound):
 		writeErr(w, http.StatusConflict, err.Error())
 		return
 	case errors.Is(err, quiz.ErrQuestionClosed):
@@ -292,10 +320,15 @@ func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		footer = &store.Footer{}
 	}
+	difficulty, err := s.svc.Difficulty(r.Context())
+	if err != nil {
+		difficulty = "全部"
+	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"title":            s.svc.Title(),
 		"quiz_state":       state,
 		"question_seconds": s.cfg.QuestionSeconds,
+		"difficulty":       difficulty,
 		"announcement":     announce,
 		"footer":           footer,
 	})
@@ -376,17 +409,18 @@ func (s *Server) handleAdminListQuestions(w http.ResponseWriter, r *http.Request
 
 func (s *Server) handleAdminCreateQuestion(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		Content string   `json:"content"`
-		Options []string `json:"options"`
-		Answer  int      `json:"answer"`
-		Score   int      `json:"score"`
-		Sort    int      `json:"sort"`
+		Content    string   `json:"content"`
+		Options    []string `json:"options"`
+		Answer     int      `json:"answer"`
+		Score      int      `json:"score"`
+		Sort       int      `json:"sort"`
+		Difficulty string   `json:"difficulty"`
 	}
 	if err := readJSON(r, &req); err != nil {
 		writeErr(w, http.StatusBadRequest, "请求体格式错误")
 		return
 	}
-	q, err := s.svc.CreateQuestion(r.Context(), req.Content, req.Options, req.Answer, req.Score, req.Sort)
+	q, err := s.svc.CreateQuestion(r.Context(), req.Content, req.Options, req.Answer, req.Score, req.Sort, req.Difficulty)
 	if err != nil {
 		writeErr(w, http.StatusBadRequest, err.Error())
 		return
@@ -412,6 +446,23 @@ func (s *Server) handleAdminSetActive(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"id": id, "active": req.Active})
+}
+
+// ---------- admin: difficulty ----------
+
+func (s *Server) handleAdminDifficulty(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Difficulty string `json:"difficulty"`
+	}
+	if err := readJSON(r, &req); err != nil {
+		writeErr(w, http.StatusBadRequest, "请求体格式错误")
+		return
+	}
+	if err := s.svc.SetDifficulty(r.Context(), req.Difficulty); err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"ok": "true", "difficulty": req.Difficulty})
 }
 
 // ---------- admin: backgrounds ----------

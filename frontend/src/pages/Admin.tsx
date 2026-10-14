@@ -14,6 +14,7 @@ interface Question {
   answer: number
   score: number
   active: boolean
+  difficulty: string
 }
 
 export default function Admin() {
@@ -24,6 +25,8 @@ export default function Admin() {
   const [options, setOptions] = useState('')
   const [answerIdx, setAnswerIdx] = useState(0)
   const [score, setScore] = useState(10)
+  const [difficulty, setDifficulty] = useState('简单')
+  const [sessionDiff, setSessionDiff] = useState('全部')
   const [bgs, setBgs] = useState<Bg[]>([])
   const [uploading, setUploading] = useState(false)
   const [footer, setFooter] = useState({ owner: '', license: '', icp: '', icp_icon: '', police: '', police_icon: '' })
@@ -193,6 +196,24 @@ export default function Admin() {
             <button className="btn" onClick={() => void act('/api/admin/quiz-state', { state: 'stop' }, '答题已结束')}>
               结束答题
             </button>
+            <label className="field" style={{ marginTop: 12 }}>
+              出题难度（全部/容易/简单/困难）
+              <select
+                value={sessionDiff}
+                onChange={(e) => setSessionDiff(e.target.value)}
+              >
+                {['全部', '容易', '简单', '困难'].map((d) => (
+                  <option key={d} value={d}>{d}</option>
+                ))}
+              </select>
+              <button
+                className="btn btn-secondary"
+                style={{ marginTop: 8 }}
+                onClick={() => void act('/api/admin/difficulty', { difficulty: sessionDiff }, `出题难度已设为「${sessionDiff}」`)}
+              >
+                应用难度
+              </button>
+            </label>
           </div>
 
           <div className="admin-panel">
@@ -377,12 +398,20 @@ export default function Admin() {
               分值
               <input type="number" min={1} value={score} onChange={(e) => setScore(Number(e.target.value))} />
             </label>
+            <label className="field">
+              难度
+              <select value={difficulty} onChange={(e) => setDifficulty(e.target.value)}>
+                {['容易', '简单', '困难'].map((d) => (
+                  <option key={d} value={d}>{d}</option>
+                ))}
+              </select>
+            </label>
             <button
               className="btn btn-primary"
               onClick={() =>
                 void act(
                   '/api/admin/questions',
-                  { content, options: options.split('\n').map((s) => s.trim()).filter(Boolean), answer: answerIdx, score },
+                  { content, options: options.split('\n').map((s) => s.trim()).filter(Boolean), answer: answerIdx, score, difficulty },
                   '题目已添加',
                 )
               }
@@ -397,8 +426,8 @@ export default function Admin() {
               {questions.map((q) => (
                 <li key={q.id}>
                   <span className={q.active ? '' : 'muted'}>
-                    #{q.id} {q.content.slice(0, 18)}
-                    {q.content.length > 18 ? '…' : ''}
+                    <i className={`qdiff d-${q.difficulty}`}>{q.difficulty}</i> #{q.id} {q.content.slice(0, 16)}
+                    {q.content.length > 16 ? '…' : ''}
                   </span>
                   <button
                     className="mini-btn"

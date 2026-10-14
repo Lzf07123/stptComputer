@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { api, clearToken } from '../api/client'
+import { api } from '../api/client'
 
 interface Me {
   user_id: number
@@ -60,7 +60,7 @@ export default function Result() {
         <h2>{me.nickname}</h2>
         <p className="big-score">{me.score}</p>
         <p className="muted">
-          答对 {me.correct} / {me.answered} 题 · 用时 {fmt(me.elapsed_ms)}
+          最佳成绩：答对 {me.correct} / {me.answered} 题 · 用时 {fmt(me.elapsed_ms)}
         </p>
         <p className="rank-line">
           当前排名 <b>{me.rank > 0 ? `第 ${me.rank} 名` : '未上榜'}</b> / 共 {me.total} 人参与
@@ -68,11 +68,17 @@ export default function Result() {
         <button
           className="btn"
           onClick={() => {
-            clearToken()
-            nav('/quiz')
+            void (async () => {
+              try {
+                await api('/api/quiz/round', { method: 'POST' })
+              } catch {
+                /* 忽略，进入答题页会自动处理 */
+              }
+              nav('/quiz')
+            })()
           }}
         >
-          再来一次
+          再来一轮（保留最佳成绩）
         </button>
       </div>
 

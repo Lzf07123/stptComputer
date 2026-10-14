@@ -8,6 +8,7 @@ interface Question {
   content: string
   options: string[]
   score: number
+  difficulty: string
 }
 
 interface AnswerRes {
@@ -17,11 +18,18 @@ interface AnswerRes {
   duplicate: boolean
 }
 
+interface RoundResp {
+  round_no: number
+  questions: Question[]
+  question_seconds: number
+}
+
 type Phase = 'name' | 'loading' | 'quiz' | 'done'
 
 export default function Quiz() {
   const [phase, setPhase] = useState<Phase>('name')
   const [nickname, setNickname] = useState('')
+  const [roundNo, setRoundNo] = useState(1)
   const [questions, setQuestions] = useState<Question[]>([])
   const [idx, setIdx] = useState(0)
   const [selected, setSelected] = useState<number | null>(null)
@@ -33,7 +41,7 @@ export default function Quiz() {
   const locked = useRef(false)
   const sockRef = useRef<QuizSocket | null>(null)
 
-  // 建立带 token 的实时连接（用于在线人次统计/特效/公告）
+  // 建立带 token 的实时连接（在线人次统计/特效/公告）
   const connectSocket = () => {
     const t = getToken()
     if (!t) return
@@ -44,10 +52,38 @@ export default function Quiz() {
 
   useEffect(() => () => sockRef.current?.close(), [])
 
-  // 已有 token → 自动恢复（刷新页面/断网恢复）
+  // 答题中离开页面提醒（关闭/刷新）
   useEffect(() => {
-    if (phase !== 'name') return
-    if (!getToken()) return
+    if (phase !== 'quiz') return
+    const h = (e: BeforeUnloadEvent) => {
+      e.preventDefault()
+      e.returnValue = ''
+    }
+    window.addEventListener('beforeunload', h)
+    return () => window.removeEventListener('beforeunload', h)
+  }, [phase])
+
+  function enterRound(d: RoundResp, flashMsg: string) {
+    setRoundNo(d.round_no)
+    setQuestions(d.questions)
+    setQSeconds(d.question_seconds)
+    setSeconds(d.question_seconds)
+    setIdx(0)
+    setFeedback(null)
+    setSelected(null)
+    locked.current = false
+    if (flashMsg) setFlash(flashMsg)
+    if (d.questions.length === 0) {
+      setError('当前难度下没有题目，请联系现场工作人员')
+      setPhase('name')
+      return
+    }
+    setPhase('quiz')
+  }
+
+  // 已有 token → 恢复进行中的一轮；本轮已答完则自动开新一轮
+  useEffect(() => {
+    if (phase !== 'name' || !getToken()) return
     void resume()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -58,20 +94,23 @@ export default function Quiz() {
       connectSocket()
       const flushed = await flushPending()
       if (flushed > 0) setFlash(`已补交 ${flushed} 条缓存的答案`)
-      const [me, d] = await Promise.all([
-        api<{ answered: number }>('/api/me'),
-        api<{ questions: Question[]; question_seconds: number }>('/api/questions'),
-      ])
-      const answered = Math.min(me.answered, d.questions.length)
-      setQuestions(d.questions)
-      setQSeconds(d.question_seconds)
-      setSeconds(d.question_seconds)
-      if (answered >= d.questions.length) {
-        setPhase('done')
-      } else {
-        setIdx(answered)
-        setPhase('quiz')
+      try {
+        const cur = await api<RoundResp & { answered: number }>('/api/quiz/current')
+        const answered = Math.min(cur.answered, cur.questions.length)
+        setRoundNo(cur.round_no)
+        setQuestions(cur.questions)
+        setQSeconds(cur.question_seconds)
+        setSeconds(cur.question_seconds)
+        if (answered < cur.questions.length) {
+          setIdx(answered)
+          setPhase('quiz')
+          return
+        }
+      } catch {
+        /* 无进行中轮次 → 下面开新轮 */
       }
+      const d = await api<RoundResp>('/api/quiz/round', { method: 'POST' })
+      enterRound(d, `新一轮答题开始（第 ${d.round_no} 轮），历史最佳成绩仍保留`)
     } catch (e) {
       clearToken()
       setError((e as Error).message)
@@ -83,7 +122,7 @@ export default function Quiz() {
     setError('')
     setPhase('loading')
     try {
-      const s = await api<{ token: string }>('/api/session', {
+      const s = await api<{ token: string; recovered?: boolean }>('/api/session', {
         method: 'POST',
         body: JSON.stringify({ nickname, device_fp: getDeviceFP() }),
       })
@@ -91,17 +130,11 @@ export default function Quiz() {
       connectSocket()
       const flushed = await flushPending()
       if (flushed > 0) setFlash(`已补交 ${flushed} 条缓存的答案`)
-      const d = await api<{ questions: Question[]; question_seconds: number }>('/api/questions')
-      if (d.questions.length === 0) {
-        setError('题库为空，请联系现场工作人员')
-        setPhase('name')
-        return
+      if (s.recovered) {
+        setFlash('检测到本设备已有答题身份，已自动恢复')
       }
-      setQuestions(d.questions)
-      setQSeconds(d.question_seconds)
-      setSeconds(d.question_seconds)
-      setIdx(0)
-      setPhase('quiz')
+      const d = await api<RoundResp>('/api/quiz/round', { method: 'POST' })
+      enterRound(d, '')
     } catch (e) {
       setError((e as Error).message)
       setPhase('name')
@@ -178,7 +211,8 @@ export default function Quiz() {
       <section className="quiz-wrap">
         <div className="quiz-head">
           <span className="muted">
-            第 {idx + 1} / {total} 题
+            第 {idx + 1} / {total} 题 · 第 {roundNo} 轮
+            <span className={`diff-tag d-${q.difficulty}`}>{q.difficulty}</span>
           </span>
           <span className={`timer${seconds <= 5 ? ' danger' : ''}`}>{seconds}s</span>
         </div>

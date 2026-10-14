@@ -28,13 +28,14 @@ type User struct {
 }
 
 type Question struct {
-	ID      int64    `json:"id"`
-	Content string   `json:"content"`
-	Options []string `json:"options"`
-	Answer  int      `json:"answer"`
-	Score   int      `json:"score"`
-	Sort    int      `json:"sort"`
-	Active  bool     `json:"active"`
+	ID         int64    `json:"id"`
+	Content    string   `json:"content"`
+	Options    []string `json:"options"`
+	Answer     int      `json:"answer"`
+	Score      int      `json:"score"`
+	Sort       int      `json:"sort"`
+	Active     bool     `json:"active"`
+	Difficulty string   `json:"difficulty"`
 }
 
 type Attempt struct {
@@ -45,6 +46,7 @@ type Attempt struct {
 	Correct    bool
 	Score      int
 	RequestID  string
+	RoundNo    int
 	CreatedAt  time.Time
 }
 
@@ -111,6 +113,10 @@ func (s *Store) CreateUser(ctx context.Context, nickname, token, deviceFP string
 	return u, nil
 }
 
+func (s *Store) GetUserByDeviceFP(ctx context.Context, deviceFP string) (*User, error) {
+	return s.getUser(ctx, `SELECT id, nickname, token, device_fp, created_at FROM users WHERE device_fp = $1 ORDER BY id LIMIT 1`, deviceFP)
+}
+
 func (s *Store) GetUserByToken(ctx context.Context, token string) (*User, error) {
 	return s.getUser(ctx, `SELECT id, nickname, token, device_fp, created_at FROM users WHERE token = $1`, token)
 }
@@ -133,16 +139,18 @@ func (s *Store) getUser(ctx context.Context, q string, arg any) (*User, error) {
 
 // ---------- questions ----------
 
-func (s *Store) ListActiveQuestions(ctx context.Context) ([]Question, error) {
-	return s.listQuestions(ctx, `SELECT id, content, options, answer, score, sort, active FROM questions WHERE active ORDER BY sort, id`)
+func (s *Store) ListActiveQuestions(ctx context.Context, difficulty string) ([]Question, error) {
+	return s.listQuestions(ctx,
+		`SELECT id, content, options, answer, score, sort, active, difficulty
+		 FROM questions WHERE active AND ($1 = '全部' OR difficulty = $1) ORDER BY sort, id`, difficulty)
 }
 
 func (s *Store) AllQuestions(ctx context.Context) ([]Question, error) {
-	return s.listQuestions(ctx, `SELECT id, content, options, answer, score, sort, active FROM questions ORDER BY sort, id`)
+	return s.listQuestions(ctx, `SELECT id, content, options, answer, score, sort, active, difficulty FROM questions ORDER BY sort, id`)
 }
 
-func (s *Store) listQuestions(ctx context.Context, q string) ([]Question, error) {
-	rows, err := s.pool.Query(ctx, q)
+func (s *Store) listQuestions(ctx context.Context, q string, args ...any) ([]Question, error) {
+	rows, err := s.pool.Query(ctx, q, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -151,7 +159,7 @@ func (s *Store) listQuestions(ctx context.Context, q string) ([]Question, error)
 	for rows.Next() {
 		var item Question
 		var raw []byte
-		if err := rows.Scan(&item.ID, &item.Content, &raw, &item.Answer, &item.Score, &item.Sort, &item.Active); err != nil {
+		if err := rows.Scan(&item.ID, &item.Content, &raw, &item.Answer, &item.Score, &item.Sort, &item.Active, &item.Difficulty); err != nil {
 			return nil, err
 		}
 		if err := json.Unmarshal(raw, &item.Options); err != nil {
@@ -166,8 +174,8 @@ func (s *Store) GetQuestion(ctx context.Context, id int64) (*Question, error) {
 	item := &Question{}
 	var raw []byte
 	err := s.pool.QueryRow(ctx,
-		`SELECT id, content, options, answer, score, sort, active FROM questions WHERE id = $1`, id).
-		Scan(&item.ID, &item.Content, &raw, &item.Answer, &item.Score, &item.Sort, &item.Active)
+		`SELECT id, content, options, answer, score, sort, active, difficulty FROM questions WHERE id = $1`, id).
+		Scan(&item.ID, &item.Content, &raw, &item.Answer, &item.Score, &item.Sort, &item.Active, &item.Difficulty)
 	if err != nil {
 		if err.Error() == "no rows in result set" {
 			return nil, ErrNotFound
@@ -180,12 +188,12 @@ func (s *Store) GetQuestion(ctx context.Context, id int64) (*Question, error) {
 	return item, nil
 }
 
-func (s *Store) CreateQuestion(ctx context.Context, content string, options []string, answer, score, sort int) (*Question, error) {
+func (s *Store) CreateQuestion(ctx context.Context, content string, options []string, answer, score, sort int, difficulty string) (*Question, error) {
 	raw, _ := json.Marshal(options)
-	item := &Question{Content: content, Options: options, Answer: answer, Score: score, Sort: sort}
+	item := &Question{Content: content, Options: options, Answer: answer, Score: score, Sort: sort, Difficulty: difficulty}
 	err := s.pool.QueryRow(ctx,
-		`INSERT INTO questions (content, options, answer, score, sort) VALUES ($1,$2,$3,$4,$5) RETURNING id`,
-		content, raw, answer, score, sort).Scan(&item.ID)
+		`INSERT INTO questions (content, options, answer, score, sort, difficulty) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id`,
+		content, raw, answer, score, sort, difficulty).Scan(&item.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -207,9 +215,9 @@ func (s *Store) SetQuestionActive(ctx context.Context, id int64, active bool) er
 
 func (s *Store) InsertAttempt(ctx context.Context, a *Attempt) (*Attempt, bool, error) {
 	tag, err := s.pool.Exec(ctx,
-		`INSERT INTO attempts (user_id, question_id, selected, correct, score, request_id)
-		 VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT (request_id) DO NOTHING`,
-		a.UserID, a.QuestionID, a.Selected, a.Correct, a.Score, a.RequestID)
+		`INSERT INTO attempts (user_id, question_id, selected, correct, score, request_id, round_no)
+		 VALUES ($1,$2,$3,$4,$5,$6,$7) ON CONFLICT (request_id) DO NOTHING`,
+		a.UserID, a.QuestionID, a.Selected, a.Correct, a.Score, a.RequestID, a.RoundNo)
 	if err != nil {
 		return nil, false, err
 	}
@@ -252,6 +260,68 @@ func (s *Store) UserStats(ctx context.Context, userID int64) (*UserStats, error)
 	return st, nil
 }
 
+// ---------- rounds & best score ----------
+
+// NextRound 为用户开启新一轮并返回轮次号（持久化在 users.current_round）。
+func (s *Store) NextRound(ctx context.Context, userID int64) (int, error) {
+	var n int
+	err := s.pool.QueryRow(ctx,
+		`UPDATE users SET current_round = current_round + 1 WHERE id = $1 RETURNING current_round`,
+		userID).Scan(&n)
+	return n, err
+}
+
+// CurrentRoundNo 返回用户当前轮次号（0 表示尚未开始）。
+func (s *Store) CurrentRoundNo(ctx context.Context, userID int64) (int, error) {
+	var n int
+	err := s.pool.QueryRow(ctx,
+		`SELECT current_round FROM users WHERE id = $1`, userID).Scan(&n)
+	return n, err
+}
+
+type RoundStats struct {
+	Correct int
+	Count   int
+	First   time.Time
+	Last    time.Time
+}
+
+func (s *Store) RoundStats(ctx context.Context, userID int64, roundNo int) (*RoundStats, error) {
+	st := &RoundStats{}
+	err := s.pool.QueryRow(ctx,
+		`SELECT COALESCE(SUM(CASE WHEN correct THEN 1 ELSE 0 END),0), COUNT(*),
+		        COALESCE(MIN(created_at), now()), COALESCE(MAX(created_at), now())
+		 FROM attempts WHERE user_id = $1 AND round_no = $2`, userID, roundNo).
+		Scan(&st.Correct, &st.Count, &st.First, &st.Last)
+	if err != nil {
+		return nil, err
+	}
+	return st, nil
+}
+
+// BestRoundStats 取最高成绩的一轮（同分取用时更短）。
+func (s *Store) BestRoundStats(ctx context.Context, userID int64) (*RoundStats, error) {
+	st := &RoundStats{}
+	err := s.pool.QueryRow(ctx,
+		`SELECT COALESCE(st.correct,0), COALESCE(st.cnt,0),
+		        COALESCE(st.first_ts, now()), COALESCE(st.last_ts, now())
+		 FROM (
+		     SELECT COUNT(*) FILTER (WHERE correct) AS correct, COUNT(*) AS cnt,
+		            MIN(created_at) AS first_ts, MAX(created_at) AS last_ts
+		     FROM attempts WHERE user_id = $1 GROUP BY round_no
+		 ) st
+		 ORDER BY st.correct DESC, (st.last_ts - st.first_ts) ASC
+		 LIMIT 1`, userID).
+		Scan(&st.Correct, &st.Count, &st.First, &st.Last)
+	if err != nil {
+		if err.Error() == "no rows in result set" {
+			return &RoundStats{}, nil
+		}
+		return nil, err
+	}
+	return st, nil
+}
+
 // ---------- quiz state ----------
 
 func (s *Store) QuizState(ctx context.Context) (string, error) {
@@ -265,6 +335,20 @@ func (s *Store) QuizState(ctx context.Context) (string, error) {
 
 func (s *Store) SetQuizState(ctx context.Context, state string) error {
 	_, err := s.pool.Exec(ctx, `UPDATE quiz_state SET state = $1 WHERE id = 1`, state)
+	return err
+}
+
+func (s *Store) QuizDifficulty(ctx context.Context) (string, error) {
+	var d string
+	err := s.pool.QueryRow(ctx, `SELECT difficulty FROM quiz_state WHERE id = 1`).Scan(&d)
+	if err != nil {
+		return "全部", err
+	}
+	return d, nil
+}
+
+func (s *Store) SetQuizDifficulty(ctx context.Context, d string) error {
+	_, err := s.pool.Exec(ctx, `UPDATE quiz_state SET difficulty = $1 WHERE id = 1`, d)
 	return err
 }
 

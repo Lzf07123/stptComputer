@@ -17,6 +17,7 @@ import (
 
 var (
 	ErrQuizNotStarted = errors.New("答题未开始")
+	ErrNoRound        = errors.New("请先开始一轮答题")
 	ErrQuestionClosed = errors.New("题目不可用")
 	ErrBadRequest     = errors.New("参数错误")
 )
@@ -36,22 +37,29 @@ func (s *Service) Title() string { return s.title }
 
 // ---------- session ----------
 
-func (s *Service) StartSession(ctx context.Context, nickname, deviceFP string) (*store.User, error) {
+func (s *Service) StartSession(ctx context.Context, nickname, deviceFP string) (*store.User, bool, error) {
 	nick := strings.TrimSpace(nickname)
 	r := []rune(nick)
 	if len(r) == 0 || len(r) > 16 {
-		return nil, errors.New("昵称长度需为 1-16 个字符")
+		return nil, false, errors.New("昵称长度需为 1-16 个字符")
 	}
 	for _, c := range nick {
 		if c < 0x20 || c == 0x7f {
-			return nil, errors.New("昵称含非法字符")
+			return nil, false, errors.New("昵称含非法字符")
 		}
 	}
 	if containsBadWord(nick) {
-		return nil, errors.New("昵称含敏感词，请更换")
+		return nil, false, errors.New("昵称含敏感词，请更换")
+	}
+	// 同一设备（浏览器指纹）只允许一个答题身份，重复注册直接恢复原身份
+	if deviceFP != "" {
+		if ex, err := s.store.GetUserByDeviceFP(ctx, deviceFP); err == nil && ex != nil {
+			return ex, true, nil
+		}
 	}
 	token := randomHex(32)
-	return s.store.CreateUser(ctx, nick, token, deviceFP)
+	u, err := s.store.CreateUser(ctx, nick, token, deviceFP)
+	return u, false, err
 }
 
 func (s *Service) ValidateToken(ctx context.Context, token string) (*store.User, error) {
@@ -68,8 +76,22 @@ func randomHex(n int) string {
 }
 
 func containsBadWord(s string) bool {
-	bad := []string{"傻逼", "傻比", "傻叉", "弱智", "智障", "脑残", "fuck", "shit", "nmsl", "cnm", "sb"}
-	lower := strings.ToLower(s)
+	lower := strings.ToLower(strings.Join(strings.Fields(s), ""))
+	bad := []string{
+		// 中文辱骂
+		"傻逼", "傻比", "傻叉", "傻屄", "弱智", "智障", "脑残", "白痴", "蠢货", "蠢猪",
+		"废物", "垃圾", "贱人", "贱货", "婊子", "骚货", "畜生", "禽兽", "杂种", "狗东西",
+		"狗日的", "狗娘养", "龟儿子", "操你", "草你", "肏你", "艹你", "日你", "你妈", "你麻痹",
+		"尼玛", "他妈", "他妈逼", "你妹", "滚犊子", "去死", "死全家", "断子绝孙",
+		"屁眼", "屁精", "龟孙", "王八", "王八蛋", "狗屁", "放屁", "傻蛋", "憨批", "憨憨",
+		"屌丝", "屌毛", "装逼", "装比", "撕逼", "撕比", "二逼", "逗比", "煞笔", "沙雕",
+		"贱婢", "野种", "孽种", "狗屎", "吃屎", "吃翔", "我操", "我草", "我日", "丢你",
+		"妈蛋", "妈逼", "祖宗十八代", "傻白甜", "二百五", "没妈", "没爹", "孤儿",
+		// 英文及缩写（含去空格变体）
+		"fuck", "fuk", "fck", "shit", "bitch", "bi tch", "asshole", "ass hole",
+		"bastard", "dickhead", "cunt", "nigger", "nigga", "whore", "slut", "motherfucker",
+		"nmsl", "cnm", "sb", "tmd", "wcnm", "qnmd", "ntmd", "nmd", "ggb", "mmd",
+	}
 	for _, b := range bad {
 		if strings.Contains(lower, b) {
 			return true
@@ -81,34 +103,74 @@ func containsBadWord(s string) bool {
 // ---------- questions ----------
 
 // orderedOptions 按用户维度确定性地打乱选项，提交判分时用同一顺序还原。
-func orderedOptions(q store.Question, userID int64) []string {
+func orderedOptions(q store.Question, userID int64, roundNo int) []string {
 	opts := append([]string(nil), q.Options...)
-	r := mathrand.New(mathrand.NewSource(userID*104729 + int64(q.ID)*31 + 7))
+	r := mathrand.New(mathrand.NewSource(userID*104729 + int64(q.ID)*31 + int64(roundNo)*17 + 7))
 	r.Shuffle(len(opts), func(i, j int) { opts[i], opts[j] = opts[j], opts[i] })
 	return opts
 }
 
-// Questions 按用户确定性随机抽取 limit 题（同用户刷新结果一致，保证断线恢复；
-// 不同用户抽到的题目不同；换身份重答也会换题）。
-func (s *Service) Questions(ctx context.Context, userID int64, limit int) ([]store.Question, error) {
-	qs, err := s.store.ListActiveQuestions(ctx)
+// drawQuestions 按当前难度筛选 + (用户, 轮次) 确定性随机抽 limit 题。
+// 同轮刷新结果一致（保证断线恢复），不同轮次/不同用户题目不同。
+func (s *Service) drawQuestions(ctx context.Context, userID int64, roundNo int, limit int) ([]store.Question, error) {
+	difficulty, err := s.store.QuizDifficulty(ctx)
+	if err != nil {
+		difficulty = "全部"
+	}
+	qs, err := s.store.ListActiveQuestions(ctx, difficulty)
 	if err != nil {
 		return nil, err
 	}
-	r := mathrand.New(mathrand.NewSource(userID*7919 + 13))
+	r := mathrand.New(mathrand.NewSource(userID*7919 + int64(roundNo)*104729 + 13))
 	r.Shuffle(len(qs), func(i, j int) { qs[i], qs[j] = qs[j], qs[i] })
 	if limit > 0 && len(qs) > limit {
 		qs = qs[:limit]
 	}
 	for i := range qs {
-		qs[i].Options = orderedOptions(qs[i], userID)
+		qs[i].Options = orderedOptions(qs[i], userID, roundNo)
 	}
 	return qs, nil
 }
 
+// StartRound 开始新一轮（轮次 = 历史最大轮次 + 1）。
+func (s *Service) StartRound(ctx context.Context, userID int64, limit int) (int, []store.Question, error) {
+	roundNo, err := s.store.NextRound(ctx, userID)
+	if err != nil {
+		return 0, nil, err
+	}
+	qs, err := s.drawQuestions(ctx, userID, roundNo, limit)
+	if err != nil {
+		return 0, nil, err
+	}
+	return roundNo, qs, nil
+}
+
+// CurrentRound 返回当前进行中的一轮；无轮次或本轮已答完返回 ErrNoRound。
+func (s *Service) CurrentRound(ctx context.Context, userID int64, limit int) (int, []store.Question, int, error) {
+	roundNo, err := s.store.CurrentRoundNo(ctx, userID)
+	if err != nil {
+		return 0, nil, 0, err
+	}
+	if roundNo == 0 {
+		return 0, nil, 0, ErrNoRound
+	}
+	qs, err := s.drawQuestions(ctx, userID, roundNo, limit)
+	if err != nil {
+		return 0, nil, 0, err
+	}
+	st, err := s.store.RoundStats(ctx, userID, roundNo)
+	if err != nil {
+		return 0, nil, 0, err
+	}
+	if st.Count >= len(qs) {
+		return 0, nil, 0, ErrNoRound
+	}
+	return roundNo, qs, st.Count, nil
+}
+
 // correctIndex 返回该用户视角下正确答案的下标。
-func correctIndex(q store.Question, userID int64) int {
-	order := orderedOptions(q, userID)
+func correctIndex(q store.Question, userID int64, roundNo int) int {
+	order := orderedOptions(q, userID, roundNo)
 	answer := q.Options[q.Answer]
 	for i, o := range order {
 		if o == answer {
@@ -131,6 +193,13 @@ func (s *Service) Submit(ctx context.Context, userID int64, requestID string, qu
 	if state != "start" {
 		return nil, -1, false, ErrQuizNotStarted
 	}
+	roundNo, err := s.store.CurrentRoundNo(ctx, userID)
+	if err != nil {
+		return nil, -1, false, err
+	}
+	if roundNo == 0 {
+		return nil, -1, false, ErrNoRound
+	}
 	q, err := s.store.GetQuestion(ctx, questionID)
 	if err != nil {
 		return nil, -1, false, err
@@ -141,7 +210,7 @@ func (s *Service) Submit(ctx context.Context, userID int64, requestID string, qu
 
 	correct := false
 	if selected != nil && *selected >= 0 {
-		order := orderedOptions(*q, userID)
+		order := orderedOptions(*q, userID, roundNo)
 		if *selected < len(order) && order[*selected] == q.Options[q.Answer] {
 			correct = true
 		}
@@ -157,6 +226,7 @@ func (s *Service) Submit(ctx context.Context, userID int64, requestID string, qu
 		Correct:    correct,
 		Score:      score,
 		RequestID:  requestID,
+		RoundNo:    roundNo,
 	})
 	if err != nil {
 		return nil, -1, false, err
@@ -164,11 +234,11 @@ func (s *Service) Submit(ctx context.Context, userID int64, requestID string, qu
 	if !duplicate {
 		s.refreshRank(ctx, userID)
 	}
-	return att, correctIndex(*q, userID), duplicate, nil
+	return att, correctIndex(*q, userID, roundNo), duplicate, nil
 }
 
 func (s *Service) refreshRank(ctx context.Context, userID int64) {
-	stats, err := s.store.UserStats(ctx, userID)
+	stats, err := s.store.BestRoundStats(ctx, userID)
 	if err != nil {
 		return
 	}
@@ -201,7 +271,7 @@ func (s *Service) MyStats(ctx context.Context, userID int64) (*MyStats, error) {
 	if err != nil {
 		return nil, err
 	}
-	st, err := s.store.UserStats(ctx, userID)
+	st, err := s.store.BestRoundStats(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -223,7 +293,7 @@ func (s *Service) MyStats(ctx context.Context, userID int64) (*MyStats, error) {
 		Correct:   st.Correct,
 		Answered:  st.Count,
 		ElapsedMS: elapsed,
-		Score:     st.Correct * 10,
+		Score:     st.Correct * 10, // 最佳一轮成绩
 		Rank:      rnk + 1, // 展示用 1 起；未上榜时 rnk=-1 → 0
 		Total:     total,
 	}, nil
@@ -361,21 +431,45 @@ func (s *Service) publish(ctx context.Context, typ string, data any) error {
 	return s.pub.Publish(ctx, string(msg))
 }
 
+// ---------- difficulty ----------
+
+func validDifficulty(d string) bool {
+	return d == "全部" || d == "容易" || d == "简单" || d == "困难"
+}
+
+func (s *Service) Difficulty(ctx context.Context) (string, error) {
+	d, err := s.store.QuizDifficulty(ctx)
+	if err != nil {
+		return "全部", err
+	}
+	return d, nil
+}
+
+func (s *Service) SetDifficulty(ctx context.Context, d string) error {
+	if !validDifficulty(d) {
+		return ErrBadRequest
+	}
+	return s.store.SetQuizDifficulty(ctx, d)
+}
+
 // ---------- admin: questions ----------
 
 func (s *Service) AllQuestions(ctx context.Context) ([]store.Question, error) {
 	return s.store.AllQuestions(ctx)
 }
 
-func (s *Service) CreateQuestion(ctx context.Context, content string, options []string, answer, score, sort int) (*store.Question, error) {
+func (s *Service) CreateQuestion(ctx context.Context, content string, options []string, answer, score, sort int, difficulty string) (*store.Question, error) {
 	content = strings.TrimSpace(content)
 	if content == "" || len(options) < 2 || len(options) > 6 || answer < 0 || answer >= len(options) {
+		return nil, ErrBadRequest
+	}
+	if !validDifficulty(difficulty) || difficulty == "全部" {
 		return nil, ErrBadRequest
 	}
 	if score <= 0 {
 		score = 10
 	}
-	return s.store.CreateQuestion(ctx, content, options, answer, score, sort)
+	return s.store.CreateQuestion(ctx, content, options, answer, score, sort, difficulty)
 }
 
 func (s *Service) SetQuestionActive(ctx context.Context, id int64, active bool) error {
