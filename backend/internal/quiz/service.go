@@ -719,9 +719,14 @@ func (s *Service) SetDifficulty(ctx context.Context, d string) error {
 	return s.store.SetQuizDifficulty(ctx, d)
 }
 
-// ClearQuestions 一键清空题库（连同答题记录）。
-func (s *Service) ClearQuestions(ctx context.Context) (int64, int64, error) {
+// ClearQuestions 一键清空题库（答题记录与排行榜保留）。
+func (s *Service) ClearQuestions(ctx context.Context) (int64, error) {
 	return s.store.ClearQuestions(ctx)
+}
+
+// ClearBackgrounds 一键清空背景图（返回文件路径供清理磁盘）。
+func (s *Service) ClearBackgrounds(ctx context.Context) ([]string, error) {
+	return s.store.DeleteAllBackgrounds(ctx)
 }
 
 // ---------- admin: questions ----------

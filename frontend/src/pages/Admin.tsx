@@ -38,7 +38,7 @@ export default function Admin() {
   const [verified, setVerified] = useState(false)
   const [ov, setOv] = useState<OvResp | null>(null)
   const [tab, setTab] = useState<'overview' | 'control' | 'questions' | 'appearance'>('control')
-  const [clearStep, setClearStep] = useState<null | 'ask' | 'final'>(null)
+  const [wipe, setWipe] = useState<{ target: 'questions' | 'bgs'; step: 'ask' | 'final' } | null>(null)
   const [msg, setMsg] = useState('')
   const [questions, setQuestions] = useState<Question[]>([])
   const [content, setContent] = useState('')
@@ -270,15 +270,26 @@ export default function Admin() {
     }
   }
 
-  const clearAllQuestions = async () => {
-    setClearStep(null)
+  const confirmWipe = async () => {
+    if (!wipe) return
+    const target = wipe.target
+    setWipe(null)
     try {
-      const d = await api<{ attempts_deleted: number; questions_deleted: number }>('/api/admin/questions', {
-        method: 'DELETE',
-        headers: adminHeaders(),
-      })
-      setMsg(`✔ 已清空：${d.questions_deleted} 道题目、${d.attempts_deleted} 条答题记录`)
-      void reload()
+      if (target === 'questions') {
+        const d = await api<{ questions_deleted: number }>('/api/admin/questions', {
+          method: 'DELETE',
+          headers: adminHeaders(),
+        })
+        setMsg(`✔ 已清空 ${d.questions_deleted} 道题目（排行榜与答题记录保留）`)
+        void reload()
+      } else {
+        const d = await api<{ backgrounds_deleted: number }>('/api/admin/backgrounds', {
+          method: 'DELETE',
+          headers: adminHeaders(),
+        })
+        setMsg(`✔ 已清空 ${d.backgrounds_deleted} 张背景图`)
+        void reloadBgs()
+      }
     } catch (e) {
       setMsg(`✘ ${(e as Error).message}`)
     }
@@ -523,7 +534,14 @@ export default function Admin() {
           </div>
 
           <div className="admin-panel">
-            <h3>首页背景轮播</h3>
+            <div className="qbank-head">
+              <h3>首页背景轮播</h3>
+              {bgs.length > 0 && (
+                <button className="mini-btn danger" onClick={() => setWipe({ target: 'bgs', step: 'ask' })}>
+                  一键清空
+                </button>
+              )}
+            </div>
             <label className="field">
               {uploading ? '上传中…' : '批量上传图片（可多选，单张 ≤10MB）'}
               <input
@@ -562,7 +580,7 @@ export default function Admin() {
       <div className="card">
         <div className="qbank-head">
           <h3>题库（{questions.length}）</h3>
-          <button className="mini-btn danger" onClick={() => setClearStep('ask')}>
+          <button className="mini-btn danger" onClick={() => setWipe({ target: 'questions', step: 'ask' })}>
             一键清空题库
           </button>
         </div>
@@ -657,30 +675,41 @@ export default function Admin() {
       </div>
       )}
 
-      {clearStep && (
-        <div className="modal-veil" onClick={() => setClearStep(null)}>
+      {wipe && (
+        <div className="modal-veil" onClick={() => setWipe(null)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
-            {clearStep === 'ask' ? (
+            {wipe.step === 'ask' ? (
               <>
-                <h3>清空全部题库？</h3>
+                <h3>{wipe.target === 'questions' ? '清空全部题库？' : '清空全部背景图？'}</h3>
                 <ul className="side-effects">
-                  <li>将删除全部 <b>{questions.length} 道题目</b></li>
-                  <li>同时删除所有<b>答题记录</b>，排行榜与个人成绩将归零</li>
-                  <li>清空后<b>不会重新播种</b>内置示例题，请随后导入正式题库</li>
+                  {wipe.target === 'questions' ? (
+                    <>
+                      <li>将删除全部 <b>{questions.length} 道题目</b></li>
+                      <li><b>答题记录与排行榜完整保留</b>，已答成绩不受影响</li>
+                      <li>清空后<b>不会重新播种</b>内置示例题，请随后导入正式题库</li>
+                    </>
+                  ) : (
+                    <>
+                      <li>将删除全部 <b>{bgs.length} 张背景图</b>（含上传文件）</li>
+                      <li>首页将回退为<b>粒子动画</b>背景</li>
+                    </>
+                  )}
                   <li>此操作<b>不可恢复</b></li>
                 </ul>
                 <div className="modal-actions">
-                  <button className="btn" onClick={() => setClearStep(null)}>取消</button>
-                  <button className="btn btn-primary" onClick={() => setClearStep('final')}>继续</button>
+                  <button className="btn" onClick={() => setWipe(null)}>取消</button>
+                  <button className="btn btn-primary" onClick={() => setWipe({ ...wipe, step: 'final' })}>继续</button>
                 </div>
               </>
             ) : (
               <>
                 <h3>最后确认</h3>
-                <p className="muted">再次确认：清空题库将同时删除全部答题记录，且不可恢复。确定清空吗？</p>
+                <p className="muted">
+                  再次确认：确定清空全部{wipe.target === 'questions' ? '题目' : '背景图'}吗？此操作不可恢复。
+                </p>
                 <div className="modal-actions">
-                  <button className="btn" onClick={() => setClearStep('ask')}>返回</button>
-                  <button className="btn btn-primary" onClick={() => void clearAllQuestions()}>确认清空</button>
+                  <button className="btn" onClick={() => setWipe({ ...wipe, step: 'ask' })}>返回</button>
+                  <button className="btn btn-primary" onClick={() => void confirmWipe()}>确认清空</button>
                 </div>
               </>
             )}

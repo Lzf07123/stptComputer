@@ -261,7 +261,7 @@ func (s *Store) GetAttemptByRequest(ctx context.Context, requestID string) (*Att
 	a := &Attempt{}
 	var sel int
 	err := s.pool.QueryRow(ctx,
-		`SELECT id, user_id, question_id, COALESCE(selected,-1), correct, score, request_id, created_at
+		`SELECT id, user_id, COALESCE(question_id, 0), COALESCE(selected,-1), correct, score, request_id, created_at
 		 FROM attempts WHERE request_id = $1`, requestID).
 		Scan(&a.ID, &a.UserID, &a.QuestionID, &sel, &a.Correct, &a.Score, &a.RequestID, &a.CreatedAt)
 	if err != nil {
@@ -549,30 +549,44 @@ func (s *Store) CountBackgrounds(ctx context.Context) (int64, error) {
 
 // ---------- clear questions ----------
 
-// ClearQuestions 一键清空：删除全部答题记录与题目，并标记 skip_seed
-// 防止应用重启后种子题被重新播种（用户意图保留）。
-func (s *Store) ClearQuestions(ctx context.Context) (attempts, questions int64, err error) {
+// ClearQuestions 一键清空题库：仅删除题目（question_id ON DELETE SET NULL），
+// 答题记录与排行榜完整保留；并标记 skip_seed 防重启重新播种。
+func (s *Store) ClearQuestions(ctx context.Context) (questions int64, err error) {
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
-		return 0, 0, err
+		return 0, err
 	}
 	defer tx.Rollback(ctx)
-	at, err := tx.Exec(ctx, `DELETE FROM attempts`)
-	if err != nil {
-		return 0, 0, err
-	}
 	qt, err := tx.Exec(ctx, `DELETE FROM questions`)
 	if err != nil {
-		return 0, 0, err
+		return 0, err
 	}
 	if _, err := tx.Exec(ctx,
 		`INSERT INTO app_meta (k, v) VALUES ('skip_seed', '1') ON CONFLICT (k) DO UPDATE SET v = '1'`); err != nil {
-		return 0, 0, err
+		return 0, err
 	}
 	if err := tx.Commit(ctx); err != nil {
-		return 0, 0, err
+		return 0, err
 	}
-	return at.RowsAffected(), qt.RowsAffected(), nil
+	return qt.RowsAffected(), nil
+}
+
+// DeleteAllBackgrounds 删除全部背景图记录并返回文件路径（供调用方清理磁盘）。
+func (s *Store) DeleteAllBackgrounds(ctx context.Context) ([]string, error) {
+	rows, err := s.pool.Query(ctx, `DELETE FROM backgrounds RETURNING file_path`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var paths []string
+	for rows.Next() {
+		var p string
+		if err := rows.Scan(&p); err != nil {
+			return nil, err
+		}
+		paths = append(paths, p)
+	}
+	return paths, rows.Err()
 }
 
 // SeedSkipped 用户是否执行过一键清空（跳过种子播种）。

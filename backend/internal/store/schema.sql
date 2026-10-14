@@ -27,7 +27,7 @@ ALTER TABLE questions ADD COLUMN IF NOT EXISTS difficulty TEXT NOT NULL DEFAULT 
 CREATE TABLE IF NOT EXISTS attempts (
     id          BIGSERIAL PRIMARY KEY,
     user_id     BIGINT NOT NULL REFERENCES users(id),
-    question_id BIGINT NOT NULL REFERENCES questions(id),
+    question_id BIGINT REFERENCES questions(id) ON DELETE SET NULL,
     selected    INT,
     correct     BOOLEAN NOT NULL,
     score       INT NOT NULL DEFAULT 0,
@@ -35,6 +35,9 @@ CREATE TABLE IF NOT EXISTS attempts (
     round_no    INT NOT NULL DEFAULT 1,
     created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+ALTER TABLE attempts DROP CONSTRAINT IF EXISTS attempts_question_id_fkey;
+ALTER TABLE attempts ALTER COLUMN question_id DROP NOT NULL;
+ALTER TABLE attempts ADD CONSTRAINT attempts_question_id_fkey FOREIGN KEY (question_id) REFERENCES questions(id) ON DELETE SET NULL;
 ALTER TABLE attempts ADD COLUMN IF NOT EXISTS round_no INT NOT NULL DEFAULT 1;
 CREATE INDEX IF NOT EXISTS idx_attempts_user_round ON attempts(user_id, round_no);
 -- 迁移：历史库回填 current_round（必须排在 attempts 建表之后）

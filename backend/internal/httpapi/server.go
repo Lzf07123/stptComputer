@@ -80,6 +80,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/admin/backgrounds", s.withAdmin(s.handleAdminListBackgrounds))
 	mux.HandleFunc("POST /api/admin/backgrounds/{id}/active", s.withAdmin(s.handleAdminSetBgActive))
 	mux.HandleFunc("DELETE /api/admin/backgrounds/{id}", s.withAdmin(s.handleAdminDeleteBackground))
+	mux.HandleFunc("DELETE /api/admin/backgrounds", s.withAdmin(s.handleAdminClearBackgrounds))
 	mux.HandleFunc("POST /api/admin/uploads", s.withAdmin(s.handleAdminUpload))
 	mux.HandleFunc("GET /api/admin/footer", s.withAdmin(s.handleAdminGetFooter))
 	mux.HandleFunc("POST /api/admin/footer", s.withAdmin(s.handleAdminSaveFooter))
@@ -688,15 +689,29 @@ func (s *Server) handleAdminOverview(w http.ResponseWriter, r *http.Request) {
 // ---------- admin: clear questions ----------
 
 func (s *Server) handleAdminClearQuestions(w http.ResponseWriter, r *http.Request) {
-	attempts, questions, err := s.svc.ClearQuestions(r.Context())
+	questions, err := s.svc.ClearQuestions(r.Context())
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"ok":                "true",
-		"attempts_deleted":  attempts,
 		"questions_deleted": questions,
+	})
+}
+
+func (s *Server) handleAdminClearBackgrounds(w http.ResponseWriter, r *http.Request) {
+	paths, err := s.svc.ClearBackgrounds(r.Context())
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	for _, p := range paths {
+		s.removeUploadFile(p)
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"ok":                   "true",
+		"backgrounds_deleted": len(paths),
 	})
 }
 
