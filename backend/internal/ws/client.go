@@ -22,24 +22,29 @@ var upgrader = websocket.Upgrader{
 }
 
 type Client struct {
-	hub  *Hub
-	conn *websocket.Conn
-	send chan []byte
+	hub    *Hub
+	conn   *websocket.Conn
+	send   chan []byte
+	authed bool
 }
 
 // Serve 返回 WebSocket handler；token 为空表示匿名（大屏），否则校验。
 func Serve(hub *Hub, validate func(token string) bool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		tok := r.URL.Query().Get("token")
-		if tok != "" && !validate(tok) {
-			http.Error(w, "unauthorized", http.StatusUnauthorized)
-			return
+		authed := false
+		if tok != "" {
+			if !validate(tok) {
+				http.Error(w, "unauthorized", http.StatusUnauthorized)
+				return
+			}
+			authed = true
 		}
 		conn, err := upgrader.Upgrade(w, r, nil)
 		if err != nil {
 			return
 		}
-		c := &Client{hub: hub, conn: conn, send: make(chan []byte, 64)}
+		c := &Client{hub: hub, conn: conn, send: make(chan []byte, 64), authed: authed}
 		c.hub.register <- c
 		go c.writePump()
 		go c.readPump()

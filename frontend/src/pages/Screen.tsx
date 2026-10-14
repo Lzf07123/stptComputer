@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { api } from '../api/client'
 import { QuizSocket, wsURL } from '../ws/socket'
 
@@ -9,20 +10,29 @@ interface Entry {
   elapsed_ms: number
 }
 
+interface Stats {
+  participants: number
+  attempts: number
+  online: number
+}
+
 export default function Screen() {
   const [top, setTop] = useState<Entry[]>([])
+  const [stats, setStats] = useState<Stats>({ participants: 0, attempts: 0, online: 0 })
   const [connected, setConnected] = useState(false)
   const [effect, setEffect] = useState('')
   const [announce, setAnnounce] = useState('')
   const [state, setState] = useState('stop')
 
   useEffect(() => {
-    const syncState = () => {
-      void api<{ quiz_state: string }>('/api/config')
-        .then((c) => setState(c.quiz_state))
+    const syncStats = () => {
+      void api<Stats>('/api/stats')
+        .then(setStats)
         .catch(() => undefined)
     }
-    void syncState() // 初次进入同步一次（事件只广播增量）
+    void syncStats()
+    const st = window.setInterval(syncStats, 5000)
+
     const sock = new QuizSocket(
       wsURL(),
       (msg) => {
@@ -39,7 +49,7 @@ export default function Screen() {
       },
       (ok) => {
         setConnected(ok)
-        if (ok) void syncState() // 重连成功后重新同步
+        if (ok) void syncStats()
       },
     )
     sock.connect()
@@ -50,6 +60,7 @@ export default function Screen() {
         .catch(() => undefined)
     }, 10000)
     return () => {
+      clearInterval(st)
       clearInterval(t)
       sock.close()
     }
@@ -58,7 +69,10 @@ export default function Screen() {
   return (
     <section className={`screen${effect ? ' fx-' + effect : ''}`}>
       <header className="screen-head">
-        <h1>计算机协会 · 招新答题</h1>
+        <div className="screen-title">
+          <Link className="screen-home" to="/">← 返回首页</Link>
+          <h1>计算机协会 · 招新答题</h1>
+        </div>
         <div className="screen-status">
           <span className={`dot${connected ? ' on' : ''}`} />
           {connected ? '实时连接' : '连接中…'}
@@ -67,6 +81,12 @@ export default function Screen() {
           </span>
         </div>
       </header>
+
+      <div className="screen-stats">
+        <span>参与答题 <b>{stats.participants}</b> 人</span>
+        <span>累计答题 <b>{stats.attempts}</b> 次</span>
+        <span>在线人次 <b>{stats.online}</b></span>
+      </div>
 
       {announce && <div className="announce-banner"><span>{announce}</span></div>}
 

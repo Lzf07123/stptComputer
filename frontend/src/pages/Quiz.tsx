@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Navigate } from 'react-router-dom'
 import { api, clearToken, flushPending, getDeviceFP, getToken, loadPending, pushPending, setToken } from '../api/client'
+import { QuizSocket, wsURL } from '../ws/socket'
 
 interface Question {
   id: number
@@ -30,6 +31,18 @@ export default function Quiz() {
   const [error, setError] = useState('')
   const [flash, setFlash] = useState('')
   const locked = useRef(false)
+  const sockRef = useRef<QuizSocket | null>(null)
+
+  // 建立带 token 的实时连接（用于在线人次统计/特效/公告）
+  const connectSocket = () => {
+    const t = getToken()
+    if (!t) return
+    sockRef.current?.close()
+    sockRef.current = new QuizSocket(`${wsURL()}?token=${encodeURIComponent(t)}`, () => undefined)
+    sockRef.current.connect()
+  }
+
+  useEffect(() => () => sockRef.current?.close(), [])
 
   // 已有 token → 自动恢复（刷新页面/断网恢复）
   useEffect(() => {
@@ -42,6 +55,7 @@ export default function Quiz() {
   async function resume() {
     setPhase('loading')
     try {
+      connectSocket()
       const flushed = await flushPending()
       if (flushed > 0) setFlash(`已补交 ${flushed} 条缓存的答案`)
       const [me, d] = await Promise.all([
@@ -74,6 +88,7 @@ export default function Quiz() {
         body: JSON.stringify({ nickname, device_fp: getDeviceFP() }),
       })
       setToken(s.token)
+      connectSocket()
       const flushed = await flushPending()
       if (flushed > 0) setFlash(`已补交 ${flushed} 条缓存的答案`)
       const d = await api<{ questions: Question[]; question_seconds: number }>('/api/questions')

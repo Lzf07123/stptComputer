@@ -233,6 +233,25 @@ func (s *Service) Top(ctx context.Context, n int64) ([]rank.Entry, error) {
 	return s.rank.Top(ctx, n)
 }
 
+// ---------- stats ----------
+
+type Stats struct {
+	Participants int64 `json:"participants"` // 参与答题人数
+	Attempts     int64 `json:"attempts"`     // 累计答题次数
+}
+
+func (s *Service) Stats(ctx context.Context) (*Stats, error) {
+	p, err := s.store.CountAnsweredUsers(ctx)
+	if err != nil {
+		return nil, err
+	}
+	a, err := s.store.CountAttempts(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return &Stats{Participants: p, Attempts: a}, nil
+}
+
 // ---------- footer ----------
 
 func (s *Service) Footer(ctx context.Context) (*store.Footer, error) {

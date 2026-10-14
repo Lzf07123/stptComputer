@@ -312,6 +312,20 @@ func (s *Store) InsertAnnouncement(ctx context.Context, content, typ string) (*A
 	return a, nil
 }
 
+// ---------- stats ----------
+
+func (s *Store) CountAttempts(ctx context.Context) (int64, error) {
+	var n int64
+	err := s.pool.QueryRow(ctx, `SELECT COUNT(*) FROM attempts`).Scan(&n)
+	return n, err
+}
+
+func (s *Store) CountAnsweredUsers(ctx context.Context) (int64, error) {
+	var n int64
+	err := s.pool.QueryRow(ctx, `SELECT COUNT(DISTINCT user_id) FROM attempts`).Scan(&n)
+	return n, err
+}
+
 // ---------- footer ----------
 
 type Footer struct {

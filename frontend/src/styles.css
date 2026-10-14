@@ -266,6 +266,35 @@ input:focus, textarea:focus { outline: none; border-color: var(--blue); }
   z-index: 50;
 }
 .screen-head { display: flex; justify-content: space-between; align-items: center; }
+.screen-title { display: flex; flex-direction: column; gap: 8px; }
+.screen-home {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 2px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 14px;
+  color: var(--muted);
+  text-decoration: none;
+  font-size: 13px;
+}
+.screen-home:hover { color: var(--green); border-color: var(--green); }
+.screen-stats { display: flex; gap: 10px; margin-top: 18px; flex-wrap: wrap; }
+.screen-stats span {
+  border: 2px solid var(--border);
+  border-radius: 999px;
+  padding: 6px 18px;
+  font-size: 15px;
+  color: var(--muted);
+}
+.screen-stats b {
+  color: var(--text);
+  font-family: var(--font-retro);
+  font-size: 1.35em;
+  font-weight: 400;
+  margin: 0 4px;
+}
 .screen-head h1 {
   margin: 0; font-size: clamp(28px, 4vw, 50px);
   color: var(--text); letter-spacing: 4px;

@@ -41,6 +41,7 @@ func (s *Server) Handler() http.Handler {
 
 	// 公开
 	mux.HandleFunc("GET /api/backgrounds", s.handleBackgrounds)
+	mux.HandleFunc("GET /api/stats", s.handleStats)
 	mux.HandleFunc("POST /api/session", s.handleSession)
 	mux.HandleFunc("GET /api/rank", s.handleRank)
 	mux.HandleFunc("GET /api/qrcode", s.handleQrcode)
@@ -151,6 +152,20 @@ func readJSON(r *http.Request, v any) error {
 }
 
 // ---------- handlers ----------
+
+func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {
+	st, err := s.svc.Stats(r.Context())
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	_, online := s.hub.ClientCounts()
+	writeJSON(w, http.StatusOK, map[string]any{
+		"participants": st.Participants,
+		"attempts":     st.Attempts,
+		"online":       online,
+	})
+}
 
 func (s *Server) handleSession(w http.ResponseWriter, r *http.Request) {
 	var req struct {
