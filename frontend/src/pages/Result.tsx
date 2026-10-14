@@ -76,7 +76,7 @@ export default function Result() {
           {top.map((e, i) => (
             <li key={e.user_id} className={e.user_id === String(me.user_id) ? 'self' : ''}>
               <span className={`rank-no no${i + 1}`}>{i + 1}</span>
-              <span className="rank-name">{e.nickname}</span>
+              <span className="rank-name" title={e.nickname}>{e.nickname}</span>
               <span className="rank-detail">
                 {e.correct} 题 · {fmt(e.elapsed_ms)}
               </span>

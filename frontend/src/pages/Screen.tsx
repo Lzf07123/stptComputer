@@ -113,7 +113,7 @@ export default function Screen() {
         {top.map((e, i) => (
           <li key={e.user_id} className={`srow${i < 3 ? ` top${i + 1}` : ''}`}>
             <span className="srank">{i + 1}</span>
-            <span className="sname">{e.nickname}</span>
+            <span className="sname" title={e.nickname}>{e.nickname}</span>
             <span className="sdetail">
               {e.correct} 题 · {(e.elapsed_ms / 1000).toFixed(0)}s
             </span>

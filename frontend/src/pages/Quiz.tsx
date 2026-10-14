@@ -481,7 +481,7 @@ export default function Quiz() {
             return (
               <button key={i} className={cls} disabled={!!feedback} onClick={() => choose(i)}>
                 <span className="opt-key">{String.fromCharCode(65 + i)}</span>
-                {opt}
+                <span className="opt-text">{opt}</span>
               </button>
             )
           })}
