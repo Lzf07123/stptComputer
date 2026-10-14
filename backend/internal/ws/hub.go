@@ -15,8 +15,13 @@ type envelope struct {
 	Data any    `json:"data"`
 }
 
+// TopProvider 提供排行榜前 n 名（由 service 实现，含未答题者全量排名）。
+type TopProvider interface {
+	Top(ctx context.Context, n int64) ([]rank.Entry, error)
+}
+
 type Hub struct {
-	rank       *rank.Rank
+	rank       TopProvider
 	events     <-chan string
 	register   chan *Client
 	unregister chan *Client
@@ -26,7 +31,7 @@ type Hub struct {
 	statsReq   chan chan [2]int
 }
 
-func NewHub(rk *rank.Rank, events <-chan string) *Hub {
+func NewHub(rk TopProvider, events <-chan string) *Hub {
 	return &Hub{
 		rank:       rk,
 		events:     events,
@@ -98,7 +103,7 @@ func (h *Hub) tickRank(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-t.C:
-			entries, err := h.rank.Top(ctx, 20)
+			entries, err := h.rank.Top(ctx, 99)
 			if err != nil {
 				log.Printf("ws: top rank: %v", err)
 				continue

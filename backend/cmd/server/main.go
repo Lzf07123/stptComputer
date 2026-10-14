@@ -42,7 +42,7 @@ func main() {
 	}
 
 	svc := quiz.New(st, rk, pub, cfg.Title)
-	hub := ws.NewHub(rk, pub.Subscribe(ctx))
+	hub := ws.NewHub(svc, pub.Subscribe(ctx)) // 排行榜改走 DB 全量排名
 	go hub.Run(ctx)
 
 	srv := &http.Server{

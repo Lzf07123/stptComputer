@@ -9,6 +9,7 @@ import (
 	"fmt"
 	mathrand "math/rand"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -334,11 +335,7 @@ func (s *Service) MyStats(ctx context.Context, userID int64) (*MyStats, error) {
 	if st.Count > 0 {
 		elapsed = st.Last.Sub(st.First).Milliseconds()
 	}
-	rnk, err := s.rank.RankOf(ctx, userID)
-	if err != nil {
-		return nil, err
-	}
-	total, err := s.rank.Count(ctx)
+	rnk, total, err := s.RankOf(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -349,13 +346,51 @@ func (s *Service) MyStats(ctx context.Context, userID int64) (*MyStats, error) {
 		Answered:  st.Count,
 		ElapsedMS: elapsed,
 		Score:     st.Correct * 10, // 最佳一轮成绩
-		Rank:      rnk + 1, // 展示用 1 起；未上榜时 rnk=-1 → 0
+		Rank:      rnk,             // 全量排名（含未答题者）
 		Total:     total,
 	}, nil
 }
 
+// Top 供 WebSocket 推送使用：全量排行榜前 n 名（包含未答题者）。
 func (s *Service) Top(ctx context.Context, n int64) ([]rank.Entry, error) {
-	return s.rank.Top(ctx, n)
+	entries, _, err := s.Leaderboard(ctx, int(n))
+	return entries, err
+}
+
+// Leaderboard 返回前 limit 名与总人数（limit<=0 返回全部）。
+func (s *Service) Leaderboard(ctx context.Context, limit int) ([]rank.Entry, int64, error) {
+	rows, err := s.store.Leaderboard(ctx, limit)
+	if err != nil {
+		return nil, 0, err
+	}
+	total, err := s.store.CountAllUsers(ctx)
+	if err != nil {
+		return nil, 0, err
+	}
+	entries := make([]rank.Entry, 0, len(rows))
+	for _, r := range rows {
+		entries = append(entries, rank.Entry{
+			UserID:    strconv.FormatInt(r.UserID, 10),
+			Nickname:  r.Nickname,
+			Correct:   r.Correct,
+			ElapsedMS: r.ElapsedMS,
+		})
+	}
+	return entries, total, nil
+}
+
+// RankOf 返回用户在全量排行榜中的名次（1 起）与总人数。
+func (s *Service) RankOf(ctx context.Context, userID int64) (int64, int64, error) {
+	rows, err := s.store.Leaderboard(ctx, 0)
+	if err != nil {
+		return 0, 0, err
+	}
+	for i, r := range rows {
+		if r.UserID == userID {
+			return int64(i + 1), int64(len(rows)), nil
+		}
+	}
+	return 0, int64(len(rows)), nil
 }
 
 // ---------- stats ----------

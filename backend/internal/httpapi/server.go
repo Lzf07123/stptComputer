@@ -360,18 +360,18 @@ func (s *Server) handleMe(w http.ResponseWriter, r *http.Request, u *store.User)
 }
 
 func (s *Server) handleRank(w http.ResponseWriter, r *http.Request) {
-	n := int64(50)
+	n := 99
 	if v := r.URL.Query().Get("top"); v != "" {
-		if parsed, err := strconv.ParseInt(v, 10, 64); err == nil && parsed > 0 && parsed <= 200 {
+		if parsed, err := strconv.Atoi(v); err == nil && parsed > 0 && parsed <= 500 {
 			n = parsed
 		}
 	}
-	entries, err := s.svc.Top(r.Context(), n)
+	entries, total, err := s.svc.Leaderboard(r.Context(), n)
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"entries": entries})
+	writeJSON(w, http.StatusOK, map[string]any{"entries": entries, "total": total})
 }
 
 func (s *Server) handleQrcode(w http.ResponseWriter, r *http.Request) {

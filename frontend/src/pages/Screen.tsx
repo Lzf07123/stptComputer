@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { api } from '../api/client'
+import { api, getToken } from '../api/client'
 import { QuizSocket, wsURL } from '../ws/socket'
 
 interface Entry {
@@ -16,6 +16,12 @@ interface Stats {
   online: number
 }
 
+interface MyRank {
+  nickname: string
+  rank: number
+  total: number
+}
+
 export default function Screen() {
   const [top, setTop] = useState<Entry[]>([])
   const [stats, setStats] = useState<Stats>({ participants: 0, attempts: 0, online: 0 })
@@ -23,12 +29,19 @@ export default function Screen() {
   const [effect, setEffect] = useState('')
   const [announce, setAnnounce] = useState('')
   const [state, setState] = useState('stop')
+  const [myRank, setMyRank] = useState<MyRank | null>(null)
 
   useEffect(() => {
     const syncStats = () => {
       void api<Stats>('/api/stats')
         .then(setStats)
         .catch(() => undefined)
+      // 本机若有答题身份，头部展示自己的全量排名
+      if (getToken()) {
+        void api<MyRank>('/api/me')
+          .then(setMyRank)
+          .catch(() => undefined)
+      }
     }
     void syncStats()
     const st = window.setInterval(syncStats, 5000)
@@ -55,7 +68,7 @@ export default function Screen() {
     sock.connect()
     // 兜底轮询，防断流
     const t = window.setInterval(() => {
-      void api<{ entries: Entry[] }>('/api/rank?top=50')
+      void api<{ entries: Entry[] }>('/api/rank?top=99')
         .then((d) => setTop(d.entries))
         .catch(() => undefined)
     }, 10000)
@@ -83,6 +96,12 @@ export default function Screen() {
       </header>
 
       <div className="screen-stats">
+        {myRank && (
+          <span className="screen-me">
+            我的排名 <b>{myRank.rank > 0 ? myRank.rank : '-'}</b> / 共 {myRank.total} 人
+            <i className="screen-me-nick">{myRank.nickname}</i>
+          </span>
+        )}
         <span>参与答题 <b>{stats.participants}</b> 人</span>
         <span>累计答题 <b>{stats.attempts}</b> 次</span>
         <span>在线人次 <b>{stats.online}</b></span>

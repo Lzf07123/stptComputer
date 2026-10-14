@@ -426,6 +426,65 @@ func (s *Store) InsertAnnouncement(ctx context.Context, content, typ string) (*A
 	return a, nil
 }
 
+// ---------- leaderboard ----------
+
+type LBRow struct {
+	UserID    int64
+	Nickname  string
+	Abandoned bool
+	Correct   int
+	Count     int
+	ElapsedMS int64
+}
+
+// Leaderboard 全量排名：每人取最佳一轮（同分用时短者靠前），
+// 未答过题的排在最后（按注册先后）；limit<=0 返回全部。
+func (s *Store) Leaderboard(ctx context.Context, limit int) ([]LBRow, error) {
+	q := `SELECT u.id, u.nickname, u.abandoned,
+	             COALESCE(b.correct, 0), COALESCE(b.cnt, 0), COALESCE(b.elapsed_ms, 0)
+	      FROM users u
+	      LEFT JOIN (
+	          SELECT DISTINCT ON (user_id)
+	                 user_id,
+	                 COUNT(*) FILTER (WHERE correct) AS correct,
+	                 COUNT(*) AS cnt,
+	                 (EXTRACT(EPOCH FROM (MAX(created_at) - MIN(created_at))) * 1000)::bigint AS elapsed_ms
+	          FROM attempts
+	          GROUP BY user_id, round_no
+	          ORDER BY user_id, correct DESC, elapsed_ms ASC
+	      ) b ON b.user_id = u.id
+	      ORDER BY COALESCE(b.correct, 0) DESC, COALESCE(b.elapsed_ms, 0) ASC, u.id ASC`
+	if limit > 0 {
+		q += ` LIMIT $1`
+	}
+	var err error
+	var rows pgx.Rows
+	if limit > 0 {
+		rows, err = s.pool.Query(ctx, q, limit)
+	} else {
+		rows, err = s.pool.Query(ctx, q)
+	}
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []LBRow{}
+	for rows.Next() {
+		var r LBRow
+		if err := rows.Scan(&r.UserID, &r.Nickname, &r.Abandoned, &r.Correct, &r.Count, &r.ElapsedMS); err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
+func (s *Store) CountAllUsers(ctx context.Context) (int64, error) {
+	var n int64
+	err := s.pool.QueryRow(ctx, `SELECT COUNT(*) FROM users`).Scan(&n)
+	return n, err
+}
+
 // ---------- export ----------
 
 func (s *Store) ListAllUsers(ctx context.Context) ([]User, error) {

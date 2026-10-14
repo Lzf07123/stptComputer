@@ -373,6 +373,9 @@ select {
   font-size: 15px;
   color: var(--muted);
 }
+.screen-me { border-color: var(--gold) !important; color: var(--gold); }
+.screen-me b { color: var(--gold); }
+.screen-me-nick { font-style: normal; font-size: 12px; opacity: 0.8; margin-left: 6px; }
 .screen-stats b {
   color: var(--text);
   font-family: var(--font-retro);
