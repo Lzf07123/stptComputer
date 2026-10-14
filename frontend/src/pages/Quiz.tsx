@@ -303,6 +303,7 @@ export default function Quiz() {
     }
     clearToken()
     sessionStorage.removeItem('quiz_nick')
+    sessionStorage.removeItem('quiz_exited')
     sockRef.current?.close()
     setMyNick('')
     setIdentityConflict('')
@@ -312,6 +313,7 @@ export default function Quiz() {
     setIdx(0)
     setFeedback(null)
     setSelected(null)
+    setNeedsNewRound(false)
     locked.current = false
     setPhase('name')
     void checkBound()
