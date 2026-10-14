@@ -1,55 +1,96 @@
 # 计算机协会招新答题系统
 
-现场高并发答题：实时计分 + 实时排行榜 + 大屏特效 + 加群活码。
-技术栈：Go + gorilla/websocket + Redis + PostgreSQL + React 18 (Vite) + Nginx。
-详细设计见 [docs/实现方案.md](docs/实现方案.md)。
+现场高并发答题：实时计分、全量排行榜、大屏特效、加群活码、后台运营。
+技术栈：Go 1.22 + gorilla/websocket + Redis + PostgreSQL + React 18 (Vite) + Nginx，全程 Docker 化。
 
-## 一键启动（全程 Docker，不污染本机环境）
+> 设计文档见 [docs/实现方案.md](docs/实现方案.md)
+
+## 功能一览
+
+- **吸睛首页**：协会会徽 + 照片墙横向轮播（后台批量上传）+ 科技感叠加特效（粒子网络/网格/光晕/扫描光束）
+- **在线答题**：一人一设备一身份；难度自选（全部/容易/简单/困难）；每题即时判分；断网不丢分（幂等 + 本地缓冲重试）；刷新断线可恢复
+- **排行榜**：全量排名（未答题也排、名次无限）、大屏最多显示 99 名、头部显示「我的排名」、参与/答题/在线人次统计
+- **身份规则**：设备指纹去重（同设备换昵称需先放弃）；放弃身份需二次确认并告知副作用；放弃后昵称永久封存、榜单留痕；可多轮答题取历史最佳成绩
+- **后台管理**（口令验证后可见）：系统概览（资源/访问）、答题控制/特效/公告、群二维码图片切换、题库增删停/批量导入 CSV、成绩导出 CSV、首页背景/页脚信息（ICP+公安备案）配置
+
+## 快速开始（全程 Docker，不污染本机）
 
 ```bash
-cp .env.example .env   # 修改 ADMIN_PASSWORD
+cp .env.example .env   # 按需修改 ADMIN_PASSWORD 等
 docker compose -f deploy/docker-compose.yml up -d --build
 ```
 
-- 前端 + API 入口：http://localhost:8080
-- 大屏：http://localhost:8080/screen
-- 后台：http://localhost:8080/admin（口令为 .env 中的 ADMIN_PASSWORD）
-
-停止：`docker compose -f deploy/docker-compose.yml down`（加 `-v` 清空数据库）
-
-## 页面
-
-| 路径 | 说明 |
+| 入口 | 说明 |
 |---|---|
-| `/` | 吸睛首页（粒子 + 入场动画 + 双入口） |
-| `/join` | 加群二维码（活码，30s 轮询自动切换） |
-| `/quiz` | 答题（昵称领 token → 答题 → 成绩） |
-| `/result` | 个人成绩 + 实时 Top 10 |
-| `/screen` | 大屏投屏（实时排行 + 特效 + 公告） |
-| `/admin` | 后台管理（题库、公告、特效、二维码、**首页背景上传轮播**） |
+| http://localhost:8080 | 首页 |
+| /quiz | 答题 |
+| /result | 个人成绩 |
+| /screen | 排行榜大屏（投屏） |
+| /admin | 后台管理（口令见 .env） |
+| /healthz | 健康检查 |
 
-## 关键 API
+停止：`docker compose -f deploy/docker-compose.yml down`（加 `-v` 清空数据库与上传文件）
+
+## 环境变量（.env，不入库）
+
+| 变量 | 默认 | 说明 |
+|---|---|---|
+| `ADMIN_PASSWORD` | admin123 | 后台口令（务必修改） |
+| `QUESTION_SECONDS` | 20 | 每题倒计时（秒） |
+| `QUESTION_COUNT` | 10 | 每轮抽题数 |
+| `WEB_PORT` | 8080 | 对外端口 |
+
+页脚/备案/二维码/背景图等运行期内容一律在后台配置，持久化于 postgres 与 uploads 两个 Docker 数据卷，不走环境变量。
+
+## 后台使用速查
+
+1. 访问 `/admin`，输入后台口令验证（错误口令无法进入）
+2. **概览**：注册用户/参与答题/累计答题/当前在线/题库/背景/内存/协程/运行时长/DB/Redis
+3. **控制台**：开始/结束答题、特效广播、公告广播、群二维码上传切换、**导出成绩 CSV**
+4. **题库**：**批量导入**（下载模板，列：题目,选项A~F,正确答案(A-F),难度,分值；「示例」开头行自动跳过）、新增题目、启用/停用
+5. **外观**：页脚信息（拥有人/开源协议/ICP+公安备案号与图标，图标后台上传）、首页背景批量上传（原比例、横向滚动）
+
+## 关键 API（全部 JSON；`*` 需 X-Admin-Token 头）
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
-| POST | `/api/session` | 昵称 → token |
-| GET | `/api/questions` | 拉题（按用户乱序） |
-| POST | `/api/answer` | 提交（request_id 幂等） |
-| GET | `/api/rank?top=50` | 排行榜 |
-| GET | `/api/me` | 我的成绩/排名 |
-| GET | `/ws` | WebSocket 推送（可匿名=大屏） |
-| POST | `/api/admin/*` | 后台（X-Admin-Token 头） |
+| POST | /api/session | 昵称+设备指纹 → 身份（同设备同昵称自动恢复） |
+| POST | /api/quiz/round | 开始一轮（body: difficulty 可选） |
+| GET | /api/quiz/current | 恢复进行中的一轮 |
+| POST | /api/answer | 提交（request_id 幂等） |
+| GET | /api/me | 我的最佳成绩与全量排名 |
+| GET | /api/rank?top=99 | 排行榜 |
+| GET | /api/stats | 参与/答题/在线人次 |
+| GET | /api/backgrounds · /api/qrcode · /api/config | 前台资源 |
+| GET | /ws?token=… | WebSocket 实时推送（匿名=大屏） |
+| POST | /api/identity/abandon | 放弃身份（需本机 device_fp 归属校验） |
+| GET* | /api/admin/overview | 系统概览 |
+| GET* | /api/admin/export/scores | 导出成绩 CSV |
+| POST* | /api/admin/questions/import | 批量导入题目 CSV |
+| GET* | /api/admin/questions/template | 下载导入模板 |
+| POST* | /api/admin/{quiz-state,announce,effect,qrcode,uploads,footer,…} | 后台操作 |
 
 ## 目录结构
 
 ```
 backend/    Go 后端（cmd/server + internal/{config,store,rank,publish,quiz,ws,httpapi}）
-frontend/   React 前端（6 页面 + WS 客户端 + 幂等重试）
-deploy/     docker-compose.yml + nginx.conf + web Dockerfile
+frontend/   React 18 + Vite（6 页面 + WS 客户端 + 幂等重试）
+deploy/     docker-compose.yml + nginx.conf + web 构建镜像
 docs/       实现方案
 ```
 
+## 云端部署要点
+
+- 已备案域名 + 外部反向代理：TLS 在外部反代终止，本机 Nginx 只走 HTTP；**两层代理都要透传 WebSocket Upgrade 头**（见 docs §8-§9）
+- 前端构建产物建议发布到 OSS+CDN（现场"进门一分钟"静态流量集中）
+- 上线前：`.env` 改强口令 → 后台录入真实题库/二维码/备案号 → 压测（§1.3 指标）→ 现场演练
+
 ## 开发调试
 
-前端开发模式（可选项）：`cd frontend && npm run dev`，已配置 Vite 代理到 `localhost:8080`。
-后端只改代码后：`docker compose -f deploy/docker-compose.yml up -d --build app web`。
+- 前端热更：`cd frontend && npm run dev`（已配代理到 :8080；仅开发环境使用，不污染部署）
+- 后端改代码后：`docker compose -f deploy/docker-compose.yml up -d --build app web`
+- 查看日志：`docker compose -f deploy/docker-compose.yml logs -f app`
+
+## License
+
+MIT © 计算机协会 · 汕头职业技术学院
