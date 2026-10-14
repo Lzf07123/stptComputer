@@ -290,6 +290,10 @@ func (s *Server) handleStartRound(w http.ResponseWriter, r *http.Request, u *sto
 	}
 	roundNo, qs, err := s.svc.StartRound(r.Context(), u.ID, req.Difficulty, s.quizLimit())
 	if err != nil {
+		if errors.Is(err, quiz.ErrBadRequest) {
+			writeErr(w, http.StatusBadRequest, err.Error())
+			return
+		}
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
 	}
