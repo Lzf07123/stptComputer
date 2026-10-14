@@ -26,6 +26,7 @@ export default function Admin() {
   const [score, setScore] = useState(10)
   const [qrUrl, setQrUrl] = useState('')
   const [bgs, setBgs] = useState<Bg[]>([])
+  const [uploading, setUploading] = useState(false)
 
   const adminHeaders = useCallback(
     () => ({ 'X-Admin-Token': pass }),
@@ -57,32 +58,52 @@ export default function Admin() {
     }
   }, [pass, reload, reloadBgs])
 
-  const onPickBg = (e: ChangeEvent<HTMLInputElement>) => {
-    const f = e.target.files && e.target.files[0]
-    if (f) void uploadBg(f)
-  }
-
-  const uploadBg = async (f: File) => {
+  const uploadOne = async (f: File): Promise<void> => {
     const fd = new FormData()
     fd.append('file', f)
-    try {
-      const res = await fetch('/api/admin/backgrounds', {
-        method: 'POST',
-        headers: { 'X-Admin-Token': pass },
-        body: fd,
-      })
-      if (!res.ok) {
-        const b = await res.json().catch(() => ({ error: `HTTP ${res.status}` }))
-        const msg = b.error === `HTTP ${res.status}` && res.status === 413
-          ? '图片超过服务器大小限制，请压缩到 10MB 以内'
-          : (b.error || `HTTP ${res.status}`)
-        throw new Error(msg)
-      }
-      setMsg('✔ 背景已上传，首页将自动轮播')
-      void reloadBgs()
-    } catch (e) {
-      setMsg(`✘ ${(e as Error).message}`)
+    const res = await fetch('/api/admin/backgrounds', {
+      method: 'POST',
+      headers: { 'X-Admin-Token': pass },
+      body: fd,
+    })
+    if (!res.ok) {
+      const b = await res.json().catch(() => ({ error: `HTTP ${res.status}` }))
+      const msg = b.error === `HTTP ${res.status}` && res.status === 413
+        ? '图片超过服务器大小限制，请压缩到 10MB 以内'
+        : (b.error || `HTTP ${res.status}`)
+      throw new Error(`${f.name}：${msg}`)
     }
+  }
+
+  // 批量上传：最多 3 个并发，逐个提交，统计成功/失败
+  const onPickBg = async (e: ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || [])
+    e.target.value = ''
+    if (!files.length || !pass) return
+    setUploading(true)
+    let ok = 0
+    const errors: string[] = []
+    const queue = [...files]
+    const worker = async () => {
+      while (queue.length) {
+        const f = queue.shift()
+        if (!f) return
+        try {
+          await uploadOne(f)
+          ok++
+        } catch (err) {
+          errors.push((err as Error).message)
+        }
+      }
+    }
+    await Promise.all(Array.from({ length: Math.min(3, files.length) }, worker))
+    setUploading(false)
+    if (errors.length) {
+      setMsg(`✘ 上传完成：成功 ${ok}/${files.length} 张；${errors.join('；')}`)
+    } else {
+      setMsg(`✔ 批量上传成功：${ok} 张，首页已生效`)
+    }
+    void reloadBgs()
   }
 
   const toggleBg = (b: Bg) =>
@@ -167,8 +188,14 @@ export default function Admin() {
           <div className="admin-panel">
             <h3>首页背景轮播</h3>
             <label className="field">
-              上传图片（建议 16:9，自动虚化轮播，≤10MB）
-              <input type="file" accept="image/*" onChange={onPickBg} />
+              {uploading ? '上传中…' : '批量上传图片（可多选，单张 ≤10MB）'}
+              <input
+                type="file"
+                accept="image/*"
+                multiple
+                disabled={uploading}
+                onChange={(e) => void onPickBg(e)}
+              />
             </label>
             <ul className="qlist">
               {bgs.map((b) => (
