@@ -25,3 +25,4 @@ coverage/
 
 # 运行期上传资源（生产为 docker 卷；本地误运行产物也不入库）
 uploads/
+.env.example

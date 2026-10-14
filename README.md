@@ -16,7 +16,7 @@
 ## 快速开始（全程 Docker，不污染本机）
 
 ```bash
-cp .env.example .env   # 按需修改 ADMIN_PASSWORD 等
+# 可选：先创建 .env 覆盖默认配置（不提供模板，变量见下表；不创建则用默认值）
 docker compose -f deploy/docker-compose.yml up -d --build
 ```
 
