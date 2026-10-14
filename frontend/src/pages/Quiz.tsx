@@ -106,8 +106,9 @@ export default function Quiz() {
     }
   }, [blocker])
 
-  // 退出答题：保留身份与进度，返回首页
+  // 退出答题：保留身份与进度，返回首页；标记已退出，刷新/再进不自动恢复
   const exitQuiz = () => {
+    sessionStorage.setItem('quiz_exited', '1')
     allowLeaveRef.current = true
     nav('/')
   }
@@ -130,9 +131,13 @@ export default function Quiz() {
     setPhase('quiz')
   }
 
-  // 已有 token → 恢复进行中的一轮；本轮已答完则自动开新一轮
+  // 已有 token → 恢复进行中的一轮；但「退出答题」后不自动恢复，停留在选择界面
   useEffect(() => {
     if (phase !== 'name' || !getToken()) return
+    if (sessionStorage.getItem('quiz_exited') === '1') {
+      setNeedsNewRound(true)
+      return
+    }
     void resume()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -170,6 +175,7 @@ export default function Quiz() {
         setQSeconds(cur.question_seconds)
         setSeconds(cur.question_seconds)
         if (answered < cur.questions.length) {
+          sessionStorage.removeItem('quiz_exited')
           setIdx(answered)
           setPhase('quiz')
           return
@@ -197,6 +203,7 @@ export default function Quiz() {
 
   // 按所选难度开始新一轮
   async function startNewRound() {
+    sessionStorage.removeItem('quiz_exited')
     setError('')
     setPhase('loading')
     try {
@@ -213,6 +220,7 @@ export default function Quiz() {
 
   async function start(nickOverride?: string) {
     const nick = nickOverride ?? nickname
+    sessionStorage.removeItem('quiz_exited')
     setError('')
     setPhase('loading')
     try {
