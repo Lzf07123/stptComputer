@@ -43,6 +43,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/backgrounds", s.handleBackgrounds)
 	mux.HandleFunc("GET /api/stats", s.handleStats)
 	mux.HandleFunc("POST /api/identity/abandon", s.handleAbandonIdentity)
+	mux.HandleFunc("GET /api/identity/current", s.handleCurrentIdentity)
 	mux.HandleFunc("POST /api/session", s.handleSession)
 	mux.HandleFunc("GET /api/rank", s.handleRank)
 	mux.HandleFunc("GET /api/qrcode", s.handleQrcode)
@@ -156,8 +157,37 @@ func readJSON(r *http.Request, v any) error {
 
 // ---------- handlers ----------
 
-// handleAbandonIdentity 放弃答题身份：带 token 放弃自己；否则按 device_fp 放弃本机绑定身份。
+// handleCurrentIdentity 查询本机当前绑定的答题身份。
+func (s *Server) handleCurrentIdentity(w http.ResponseWriter, r *http.Request) {
+	fp := r.URL.Query().Get("device_fp")
+	if fp == "" {
+		writeErr(w, http.StatusBadRequest, "缺少 device_fp")
+		return
+	}
+	u, err := s.svc.BoundIdentity(r.Context(), fp)
+	if errors.Is(err, store.ErrNotFound) || u == nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "未绑定身份"})
+		return
+	}
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"nickname": u.Nickname,
+		"user_id":  u.ID,
+	})
+}
+
+// handleAbandonIdentity 放弃答题身份：
+// 带 token 时必须同时提供本机 device_fp 且与身份绑定一致（不能放弃他人身份）；
+// 否则按 device_fp 放弃本机绑定身份。
 func (s *Server) handleAbandonIdentity(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		DeviceFP string `json:"device_fp"`
+	}
+	_ = readJSON(r, &req)
+
 	tok := r.URL.Query().Get("token")
 	if tok == "" {
 		if h := r.Header.Get("Authorization"); strings.HasPrefix(h, "Bearer ") {
@@ -170,17 +200,13 @@ func (s *Server) handleAbandonIdentity(w http.ResponseWriter, r *http.Request) {
 			writeErr(w, http.StatusUnauthorized, "token 无效")
 			return
 		}
-		if err := s.svc.Abandon(r.Context(), u.ID); err != nil {
-			writeErr(w, http.StatusInternalServerError, err.Error())
+		if err := s.svc.Abandon(r.Context(), u.ID, req.DeviceFP); err != nil {
+			writeErr(w, http.StatusForbidden, err.Error())
 			return
 		}
 		writeJSON(w, http.StatusOK, map[string]string{"ok": "true"})
 		return
 	}
-	var req struct {
-		DeviceFP string `json:"device_fp"`
-	}
-	_ = readJSON(r, &req)
 	if req.DeviceFP == "" {
 		writeErr(w, http.StatusBadRequest, "缺少 token 或 device_fp")
 		return

@@ -198,6 +198,9 @@ body {
 .mini-quit:hover { background: rgba(220, 38, 38, 0.12); }
 .conflict-box { margin-top: 14px; border: 1px dashed var(--red); border-radius: 8px; padding: 12px; }
 .conflict-box .btn { font-size: 13px; }
+.bound-box { margin: 10px auto 0; }
+.bound-nick { font-size: 24px; font-weight: 700; color: var(--blue); margin: 6px 0 14px; }
+.bound-actions { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
 .diff-tag {
   margin-left: 8px;
   border: 1px solid var(--border);

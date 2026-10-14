@@ -40,6 +40,7 @@ export default function Quiz() {
   const [flash, setFlash] = useState('')
   const [myNick, setMyNick] = useState(() => sessionStorage.getItem('quiz_nick') || '')
   const [identityConflict, setIdentityConflict] = useState('')
+  const [boundNick, setBoundNick] = useState<string | null>(null)
   const locked = useRef(false)
   const sockRef = useRef<QuizSocket | null>(null)
 
@@ -53,6 +54,23 @@ export default function Quiz() {
   }
 
   useEffect(() => () => sockRef.current?.close(), [])
+
+  // 本机是否已有绑定身份（未登录时查询，用于直接展示恢复选项）
+  const checkBound = async () => {
+    try {
+      const d = await api<{ nickname: string }>(
+        `/api/identity/current?device_fp=${encodeURIComponent(getDeviceFP())}`,
+      )
+      setBoundNick(d.nickname)
+    } catch {
+      setBoundNick('')
+    }
+  }
+
+  useEffect(() => {
+    if (phase === 'name' && !getToken()) void checkBound()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase])
 
   // 答题中离开页面提醒（关闭/刷新）
   useEffect(() => {
@@ -126,13 +144,14 @@ export default function Quiz() {
     }
   }
 
-  async function start() {
+  async function start(nickOverride?: string) {
+    const nick = nickOverride ?? nickname
     setError('')
     setPhase('loading')
     try {
       const s = await api<{ token: string; nickname: string; recovered?: boolean }>('/api/session', {
         method: 'POST',
-        body: JSON.stringify({ nickname, device_fp: getDeviceFP() }),
+        body: JSON.stringify({ nickname: nick, device_fp: getDeviceFP() }),
       })
       setToken(s.token)
       sessionStorage.setItem('quiz_nick', s.nickname || nickname)
@@ -163,10 +182,15 @@ export default function Quiz() {
       if (byDevice) {
         await api('/api/identity/abandon', { method: 'POST', body: JSON.stringify({ device_fp: getDeviceFP() }) })
       } else {
-        await api('/api/identity/abandon', { method: 'POST' })
+        // 放弃自己的身份：必须携带本机指纹，服务端校验归属
+        await api('/api/identity/abandon', {
+          method: 'POST',
+          body: JSON.stringify({ device_fp: getDeviceFP() }),
+        })
       }
-    } catch {
-      /* 忽略 */
+    } catch (e) {
+      setError((e as Error).message)
+      return
     }
     clearToken()
     sessionStorage.removeItem('quiz_nick')
@@ -181,6 +205,7 @@ export default function Quiz() {
     setSelected(null)
     locked.current = false
     setPhase('name')
+    void checkBound()
   }
 
   async function answer(i: number | null, requestId: string) {
@@ -293,28 +318,53 @@ export default function Quiz() {
     )
   }
 
+  if (phase === 'loading') {
+    return (
+      <section className="card center">
+        <p className="muted">加载中…</p>
+      </section>
+    )
+  }
+
   return (
     <section className="card center">
       <h2>开始答题</h2>
-      <p className="muted">输入昵称领取你的答题身份（每人限领一次）</p>
-      <form
-        className="name-form"
-        onSubmit={(e) => {
-          e.preventDefault()
-          void start()
-        }}
-      >
-        <input
-          value={nickname}
-          onChange={(e) => setNickname(e.target.value)}
-          placeholder="输入昵称（1-16 字）"
-          maxLength={16}
-          autoFocus
-        />
-        <button className="btn btn-primary" type="submit" disabled={phase === 'loading'}>
-          {phase === 'loading' ? '加载中…' : '进入答题'}
-        </button>
-      </form>
+      {boundNick ? (
+        <div className="bound-box">
+          <p>本机已有答题身份</p>
+          <p className="bound-nick">「{boundNick}」</p>
+          <div className="bound-actions">
+            <button className="btn btn-primary" onClick={() => void start(boundNick)}>
+              恢复此身份
+            </button>
+            <button className="btn" onClick={() => void abandonIdentity(true)}>
+              放弃并注册新身份
+            </button>
+          </div>
+        </div>
+      ) : (
+        <>
+          <p className="muted">输入昵称领取你的答题身份（每人限领一次）</p>
+          <form
+            className="name-form"
+            onSubmit={(e) => {
+              e.preventDefault()
+              void start()
+            }}
+          >
+            <input
+              value={nickname}
+              onChange={(e) => setNickname(e.target.value)}
+              placeholder="输入昵称（1-16 字）"
+              maxLength={16}
+              autoFocus
+            />
+            <button className="btn btn-primary" type="submit">
+              进入答题
+            </button>
+          </form>
+        </>
+      )}
       {identityConflict && (
         <div className="conflict-box">
           <p className="error">{identityConflict}</p>
