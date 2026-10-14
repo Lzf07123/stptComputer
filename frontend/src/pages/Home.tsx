@@ -1,11 +1,20 @@
-import { lazy, Suspense, useEffect, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '../api/client'
 
 const ParticlesBg = lazy(() => import('../components/ParticlesBg'))
 
+interface Motion {
+  copies: number
+  gridH: number
+  dur: number
+  scroll: boolean
+}
+
 export default function Home() {
   const [bgs, setBgs] = useState<string[]>([])
+  const gridRef = useRef<HTMLDivElement>(null)
+  const [motion, setMotion] = useState<Motion>({ copies: 1, gridH: 0, dur: 24, scroll: false })
 
   // 拉取后台配置的背景图；没有则回退粒子动画
   useEffect(() => {
@@ -14,25 +23,53 @@ export default function Home() {
       .catch(() => undefined)
   }, [])
 
-  // 滚动轮播：轨道放两份图片实现无缝循环；
-  // 单张图静止；多张时按数量自适应（每张宽度至少占满 1/n 视口，速度随数量变慢）
-  const panelW = bgs.length > 0 ? `max(55vw, ${100 / bgs.length}vw)` : '55vw'
-  const duration = Math.max(bgs.length * 9, 24)
+  // 按原比例多行照片墙：内容高于一屏时纵向无缝滚动；
+  // 不超过一屏时静止展示（图少自适应）。
+  const calc = useCallback(() => {
+    const el = gridRef.current
+    if (!el || bgs.length === 0) return
+    const gridH = el.offsetHeight
+    const vh = window.innerHeight
+    const scroll = gridH > vh
+    const copies = scroll ? Math.ceil(vh / Math.max(gridH, 1)) + 2 : 1
+    const dur = Math.max(gridH / 26, 24) // ~26px/s
+    setMotion((m) =>
+      m.gridH === gridH && m.scroll === scroll ? m : { copies, gridH, dur, scroll },
+    )
+  }, [bgs])
+
+  useEffect(() => {
+    calc()
+    const onResize = () => calc()
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [calc])
+
+  const trackStyle = {
+    animationDuration: `${motion.dur}s`,
+    '--grid-h': `${motion.gridH}px`,
+  } as CSSProperties
 
   return (
     <section className="home">
       {bgs.length > 0 ? (
         <div className="bg-marquee" aria-hidden="true">
           <div
-            className={`bg-track${bgs.length === 1 ? ' static' : ''}`}
-            style={{ animationDuration: `${duration}s` }}
+            className={`bg-track-v${motion.scroll ? '' : ' static'}`}
+            style={trackStyle}
           >
-            {[...bgs, ...bgs].map((u, i) => (
-              <div
-                key={`${u}-${i}`}
-                className="bg-panel"
-                style={{ backgroundImage: `url(${u})`, width: panelW }}
-              />
+            {Array.from({ length: motion.copies }).map((_, c) => (
+              <div key={c} className="bg-grid" ref={c === 0 ? gridRef : undefined}>
+                {bgs.map((u) => (
+                  <img
+                    key={`${u}-${c}`}
+                    src={u}
+                    alt=""
+                    loading={c === 0 ? undefined : 'lazy'}
+                    onLoad={c === 0 ? calc : undefined}
+                  />
+                ))}
+              </div>
             ))}
           </div>
           <div className="bg-veil" />

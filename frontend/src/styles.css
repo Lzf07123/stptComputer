@@ -325,32 +325,38 @@ input:focus, textarea:focus { outline: none; border-color: var(--blue); }
 }
 .mini-btn:hover { border-color: var(--green); }
 
-/* ---------- 首页背景滚动轮播（后台上传，铺满整页 + 轻微虚化 + 无缝横向滚动） ---------- */
+/* ---------- 首页背景照片墙（原比例多行，超高自动纵向滚动） ---------- */
 .bg-marquee {
   position: fixed;
-  inset: -2%;
+  inset: 0;
   z-index: 0;
   overflow: hidden;
   filter: blur(5px) brightness(0.85);
 }
-.bg-track {
+.bg-track-v {
   display: flex;
-  height: 100%;
-  width: max-content;
-  animation: bgscroll linear infinite;
+  flex-direction: column;
+  animation: bgscrollV linear infinite;
 }
-.bg-track.static { animation: none; }
-.bg-panel {
-  height: 100%;
+.bg-track-v.static { animation: none; }
+.bg-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 12px;
+  padding: 12px;
   flex: none;
-  background-size: cover;
-  background-position: center;
 }
-@keyframes bgscroll {
-  from { transform: translateX(0); }
-  to   { transform: translateX(-50%); }
+.bg-grid img {
+  width: 100%;        /* 按原始比例展示，不裁切不变形 */
+  height: auto;
+  display: block;
+  border-radius: 6px;
 }
-.bg-veil { position: absolute; inset: 0; background: rgba(15, 23, 42, 0.38); }
+@keyframes bgscrollV {
+  from { transform: translateY(0); }
+  to   { transform: translateY(calc(var(--grid-h, 1000px) * -1)); }
+}
+.bg-veil { position: absolute; inset: 0; background: rgba(15, 23, 42, 0.42); }
 
 /* 首页路由：背景延伸到顶栏之下，页面无内边距，内容置顶于背景之上 */
 .route-home .topbar { background: transparent; border-bottom: none; position: relative; z-index: 2; }
@@ -369,8 +375,8 @@ input:focus, textarea:focus { outline: none; border-color: var(--blue); }
   .subtitle { font-size: 15px; }
   .home-actions { display: flex; flex-direction: column; align-items: center; margin-top: 28px; }
   .home-actions .btn { width: min(280px, 82vw); margin: 8px 0; }
-  /* 手机竖屏：背景面板至少一屏宽，逐张滚动 */
-  .bg-panel { min-width: 100vw; }
+  /* 手机竖屏：照片墙两列 */
+  .bg-grid { grid-template-columns: repeat(2, 1fr); gap: 8px; padding: 8px; }
   .card { padding: 20px; margin: 10px auto; }
   .quiz-wrap { padding: 0 4px; }
   .question { font-size: 18px; }
