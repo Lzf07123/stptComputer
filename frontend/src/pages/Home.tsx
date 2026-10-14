@@ -1,6 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '../api/client'
+import TechParticles from '../components/TechParticles'
 
 const ParticlesBg = lazy(() => import('../components/ParticlesBg'))
 
@@ -81,17 +82,45 @@ export default function Home() {
               </div>
             ))}
           </div>
-          <div className="bg-veil" />
         </div>
       ) : (
         <Suspense fallback={<div className="particles-fallback" />}>
           <ParticlesBg />
         </Suspense>
       )}
+      <div className="tech-overlay" aria-hidden="true">
+        <TechParticles />
+        <div className="tech-grid" />
+        <div className="tech-orb tech-orb-a" />
+        <div className="tech-orb tech-orb-b" />
+        <div className="tech-sweep" />
+      </div>
+      <div className="bg-veil" />
       <div className="home-inner">
-        <p className="eyebrow fade-in">STPT-2026 · QUIZ CHALLENGE</p>
+        <div className="assoc-emblem fade-in" aria-hidden="true">
+          <svg viewBox="0 0 96 96">
+            <g stroke="#22d3ee" strokeWidth="3" fill="none">
+              <rect x="18" y="18" width="60" height="60" />
+              <rect x="34" y="34" width="28" height="28" fill="rgba(34,211,238,0.16)" />
+              {[
+                'M22 10 V18', 'M38 10 V18', 'M58 10 V18', 'M74 10 V18',
+                'M22 78 V86', 'M38 78 V86', 'M58 78 V86', 'M74 78 V86',
+                'M10 22 H18', 'M10 38 H18', 'M10 58 H18', 'M10 74 H18',
+                'M78 22 H86', 'M78 38 H86', 'M78 58 H86', 'M78 74 H86',
+              ].map((d) => (
+                <path key={d} d={d} strokeLinecap="square" />
+              ))}
+            </g>
+            <text x="48" y="53" textAnchor="middle" fontSize="13" fill="#22d3ee" style={{ fontFamily: "'Press Start 2P', monospace" }}>
+              CA
+            </text>
+          </svg>
+          <span className="emblem-ring" />
+        </div>
+        <p className="eyebrow fade-in d1">汕头职业技术学院 · 计算机协会</p>
         <h1 className="fade-in d1">计算机协会</h1>
-        <p className="subtitle fade-in d2">答题挑战 · 实时排行 · 现场大奖</p>
+        <p className="assoc-en fade-in d2">COMPUTER ASSOCIATION · STPT 2026</p>
+        <p className="subtitle fade-in d2">招新答题挑战 · 实时排行 · 现场大奖</p>
         <div className="home-actions fade-in d3">
           <Link className="btn btn-secondary" to="/join">加入群聊</Link>
           <Link className="btn btn-primary" to="/quiz">开始答题</Link>

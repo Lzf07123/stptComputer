@@ -131,6 +131,36 @@ body {
   background: radial-gradient(600px 300px at 50% 30%, rgba(34, 197, 94, 0.14), transparent);
 }
 .home-inner { position: relative; text-align: center; padding: 24px; }
+
+/* ---------- 计算机协会会徽 ---------- */
+.assoc-emblem {
+  position: relative;
+  width: 108px;
+  height: 108px;
+  margin: 0 auto 16px;
+}
+.assoc-emblem svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+  filter: drop-shadow(0 0 12px rgba(34, 211, 238, 0.55));
+}
+.emblem-ring {
+  position: absolute;
+  inset: -8px;
+  border: 2px dashed rgba(34, 211, 238, 0.45);
+  border-radius: 50%;
+  animation: spin 16s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.assoc-en {
+  font-family: var(--font-pixel);
+  font-size: 12px;
+  color: var(--green);
+  letter-spacing: 3px;
+  margin: 10px 0 0;
+  text-shadow: 0 0 10px rgba(34, 197, 94, 0.55);
+}
 .eyebrow {
   font-family: var(--font-pixel);
   font-size: 13px;
@@ -529,12 +559,78 @@ select {
   from { transform: translateX(0); }
   to   { transform: translateX(calc(var(--strip-w, 1200px) * -1)); }
 }
-.bg-veil { position: absolute; inset: 0; background: rgba(15, 23, 42, 0.42); }
+.bg-veil {
+  position: fixed;
+  inset: 0;
+  z-index: 2;
+  background: rgba(15, 23, 42, 0.42);
+  pointer-events: none;
+}
+
+/* ---------- 科技感叠加特效（粒子网络/网格/光晕/扫描光束） ---------- */
+.tech-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  overflow: hidden;
+}
+.tech-overlay canvas { display: block; }
+.tech-grid {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(34, 211, 238, 0.07) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(34, 211, 238, 0.07) 1px, transparent 1px);
+  background-size: 48px 48px;
+  -webkit-mask-image: radial-gradient(ellipse at 50% 42%, #000 25%, transparent 78%);
+  mask-image: radial-gradient(ellipse at 50% 42%, #000 25%, transparent 78%);
+  animation: gridDrift 20s linear infinite;
+}
+@keyframes gridDrift {
+  from { background-position: 0 0, 0 0; }
+  to   { background-position: 48px 48px, 48px 48px; }
+}
+.tech-orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(60px);
+  opacity: 0.32;
+  mix-blend-mode: screen;
+}
+.tech-orb-a {
+  width: 420px; height: 420px;
+  background: #0891b2;
+  top: -140px; left: -100px;
+  animation: orbA 18s ease-in-out infinite alternate;
+}
+.tech-orb-b {
+  width: 380px; height: 380px;
+  background: #7c3aed;
+  bottom: -120px; right: -80px;
+  animation: orbB 22s ease-in-out infinite alternate;
+}
+@keyframes orbA { to { transform: translate(140px, 90px) scale(1.18); } }
+@keyframes orbB { to { transform: translate(-120px, -70px) scale(1.12); } }
+.tech-sweep {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(115deg, transparent 42%, rgba(34, 211, 238, 0.12) 50%, transparent 58%);
+  transform: translateX(-100%);
+  animation: sweep 8s ease-in-out infinite;
+}
+@keyframes sweep {
+  0% { transform: translateX(-100%); }
+  55%, 100% { transform: translateX(100%); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tech-grid, .tech-orb, .tech-sweep, .bg-track-h { animation: none; }
+}
 
 /* 首页路由：背景延伸到顶栏之下，页面无内边距，内容置顶于背景之上 */
 .route-home .topbar { background: transparent; border-bottom: none; position: relative; z-index: 2; }
 .route-home .page { padding: 0; }
-.home-inner { position: relative; z-index: 1; }
+.home-inner { position: relative; z-index: 3; }
 
 /* ---------- 响应式适配 ---------- */
 @media (max-width: 640px) {
@@ -550,6 +646,8 @@ select {
   .home-actions .btn { width: min(280px, 82vw); margin: 8px 0; }
   /* 手机竖屏：照片带两行 + 收紧间距（行数由 JS 自适应） */
   .bg-strip { gap: 8px; padding: 8px; }
+  .tech-orb-a { width: 240px; height: 240px; }
+  .tech-orb-b { width: 220px; height: 220px; }
   .card { padding: 20px; margin: 10px auto; }
   .quiz-wrap { padding: 0 4px; }
   .question { font-size: 18px; }
