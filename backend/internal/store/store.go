@@ -312,6 +312,39 @@ func (s *Store) InsertAnnouncement(ctx context.Context, content, typ string) (*A
 	return a, nil
 }
 
+// ---------- footer ----------
+
+type Footer struct {
+	Owner   string `json:"owner"`
+	License string `json:"license"`
+	ICP     string `json:"icp"`
+}
+
+// EnsureFooterDefaults 首次启动时写入环境变量默认值；后台修改后覆盖。
+func (s *Store) EnsureFooterDefaults(ctx context.Context, owner, license, icp string) error {
+	_, err := s.pool.Exec(ctx,
+		`INSERT INTO footer_settings (id, owner, license, icp) VALUES (1, $1, $2, $3) ON CONFLICT (id) DO NOTHING`,
+		owner, license, icp)
+	return err
+}
+
+func (s *Store) GetFooterSettings(ctx context.Context) (*Footer, error) {
+	f := &Footer{}
+	err := s.pool.QueryRow(ctx,
+		`SELECT owner, license, icp FROM footer_settings WHERE id = 1`).Scan(&f.Owner, &f.License, &f.ICP)
+	if err != nil {
+		return nil, err
+	}
+	return f, nil
+}
+
+func (s *Store) SaveFooterSettings(ctx context.Context, owner, license, icp string) error {
+	_, err := s.pool.Exec(ctx,
+		`UPDATE footer_settings SET owner = $1, license = $2, icp = $3, updated_at = now() WHERE id = 1`,
+		owner, license, icp)
+	return err
+}
+
 // ---------- backgrounds ----------
 
 func (s *Store) CreateBackground(ctx context.Context, filePath string) (*Background, error) {

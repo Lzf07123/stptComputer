@@ -35,6 +35,9 @@ services:
       QUESTION_SECONDS: ${QUESTION_SECONDS:-20}
       QUESTION_COUNT: ${QUESTION_COUNT:-10}
       UPLOAD_DIR: /app/uploads
+      FOOTER_OWNER: ${FOOTER_OWNER:-计算机协会 · 汕头职业技术学院}
+      FOOTER_LICENSE: ${FOOTER_LICENSE:-开源协议：MIT}
+      FOOTER_ICP: ${FOOTER_ICP:-}
     depends_on:
       postgres:
         condition: service_healthy

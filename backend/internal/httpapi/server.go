@@ -66,6 +66,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/admin/backgrounds", s.withAdmin(s.handleAdminListBackgrounds))
 	mux.HandleFunc("POST /api/admin/backgrounds/{id}/active", s.withAdmin(s.handleAdminSetBgActive))
 	mux.HandleFunc("DELETE /api/admin/backgrounds/{id}", s.withAdmin(s.handleAdminDeleteBackground))
+	mux.HandleFunc("GET /api/admin/footer", s.withAdmin(s.handleAdminGetFooter))
+	mux.HandleFunc("POST /api/admin/footer", s.withAdmin(s.handleAdminSaveFooter))
 
 	// 上传文件静态服务（生产由 nginx 直出共享卷，此处兜底开发模式）
 	mux.Handle("GET /uploads/", http.StripPrefix("/uploads/", http.FileServer(http.Dir(s.cfg.UploadDir))))
@@ -270,11 +272,20 @@ func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		announce = ""
 	}
+	footer, err := s.svc.Footer(r.Context())
+	if err != nil {
+		footer = &store.Footer{
+			Owner:   s.cfg.FooterOwner,
+			License: s.cfg.FooterLicense,
+			ICP:     s.cfg.FooterICP,
+		}
+	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"title":            s.svc.Title(),
 		"quiz_state":       state,
 		"question_seconds": s.cfg.QuestionSeconds,
 		"announcement":     announce,
+		"footer":           footer,
 	})
 }
 
@@ -509,4 +520,31 @@ func randHex(n int) string {
 	b := make([]byte, n)
 	_, _ = rand.Read(b)
 	return hex.EncodeToString(b)
+}
+
+// ---------- admin: footer ----------
+
+func (s *Server) handleAdminGetFooter(w http.ResponseWriter, r *http.Request) {
+	f, err := s.svc.Footer(r.Context())
+	if err != nil {
+		f = &store.Footer{Owner: s.cfg.FooterOwner, License: s.cfg.FooterLicense, ICP: s.cfg.FooterICP}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"footer": f})
+}
+
+func (s *Server) handleAdminSaveFooter(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Owner   string `json:"owner"`
+		License string `json:"license"`
+		ICP     string `json:"icp"`
+	}
+	if err := readJSON(r, &req); err != nil {
+		writeErr(w, http.StatusBadRequest, "请求体格式错误")
+		return
+	}
+	if err := s.svc.SaveFooter(r.Context(), req.Owner, req.License, req.ICP); err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"ok": "true"})
 }

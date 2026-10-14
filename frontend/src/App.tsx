@@ -5,6 +5,7 @@ import Quiz from './pages/Quiz'
 import Result from './pages/Result'
 import Screen from './pages/Screen'
 import Admin from './pages/Admin'
+import Footer from './components/Footer'
 
 export default function App() {
   const { pathname } = useLocation()
@@ -20,7 +21,7 @@ export default function App() {
           <nav>
             <Link to="/join">加群</Link>
             <Link to="/quiz">答题</Link>
-            <Link to="/screen">大屏</Link>
+            <Link to="/screen">排行榜</Link>
           </nav>
         </header>
       )}
@@ -34,18 +35,7 @@ export default function App() {
           <Route path="/admin" element={<Admin />} />
         </Routes>
       </main>
-      {!fullscreen && (
-        <footer className="footer">
-          <div className="footer-inner">
-            <span>© {new Date().getFullYear()} 计算机协会 · 汕头职业技术学院</span>
-            <span className="footer-links">
-              <Link to="/join">加入群聊</Link>
-              <Link to="/screen">大屏</Link>
-              <Link to="/admin">后台管理</Link>
-            </span>
-          </div>
-        </footer>
-      )}
+      {!fullscreen && <Footer />}
     </div>
   )
 }

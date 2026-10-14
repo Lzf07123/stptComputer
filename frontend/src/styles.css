@@ -330,6 +330,8 @@ input:focus, textarea:focus { outline: none; border-color: var(--blue); }
   font-size: 13px;
   color: var(--muted);
 }
+.footer-meta { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.footer-icp { opacity: 0.7; font-size: 12px; }
 .footer-links { display: flex; gap: 16px; }
 .footer-links a { color: var(--muted); text-decoration: none; }
 .footer-links a:hover { color: var(--green); }

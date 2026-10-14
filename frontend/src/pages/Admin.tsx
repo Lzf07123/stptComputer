@@ -27,6 +27,7 @@ export default function Admin() {
   const [qrUrl, setQrUrl] = useState('')
   const [bgs, setBgs] = useState<Bg[]>([])
   const [uploading, setUploading] = useState(false)
+  const [footer, setFooter] = useState({ owner: '', license: '', icp: '' })
 
   const adminHeaders = useCallback(
     () => ({ 'X-Admin-Token': pass }),
@@ -51,12 +52,22 @@ export default function Admin() {
     }
   }, [adminHeaders])
 
+  const reloadFooter = useCallback(async () => {
+    try {
+      const d = await api<{ footer: { owner: string; license: string; icp: string } }>('/api/admin/footer', { headers: adminHeaders() })
+      setFooter(d.footer)
+    } catch {
+      /* 忽略 */
+    }
+  }, [adminHeaders])
+
   useEffect(() => {
     if (pass) {
       void reload()
       void reloadBgs()
+      void reloadFooter()
     }
-  }, [pass, reload, reloadBgs])
+  }, [pass, reload, reloadBgs, reloadFooter])
 
   const uploadOne = async (f: File): Promise<void> => {
     const fd = new FormData()
@@ -182,6 +193,37 @@ export default function Admin() {
             </label>
             <button className="btn" onClick={() => void act('/api/admin/qrcode', { image_url: qrUrl }, '已切换二维码')}>
               切换活码
+            </button>
+          </div>
+
+          <div className="admin-panel">
+            <h3>页脚信息</h3>
+            <label className="field">
+              拥有人 / 版权
+              <input
+                value={footer.owner}
+                onChange={(e) => setFooter({ ...footer, owner: e.target.value })}
+                placeholder="计算机协会 · 汕头职业技术学院"
+              />
+            </label>
+            <label className="field">
+              开源协议
+              <input
+                value={footer.license}
+                onChange={(e) => setFooter({ ...footer, license: e.target.value })}
+                placeholder="开源协议：MIT"
+              />
+            </label>
+            <label className="field">
+              ICP 备案号（留空显示「待填写」）
+              <input
+                value={footer.icp}
+                onChange={(e) => setFooter({ ...footer, icp: e.target.value })}
+                placeholder="粤ICP备XXXXXXXX号"
+              />
+            </label>
+            <button className="btn btn-accent" onClick={() => void act('/api/admin/footer', footer, '页脚信息已更新')}>
+              保存页脚
             </button>
           </div>
 

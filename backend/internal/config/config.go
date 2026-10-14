@@ -14,6 +14,9 @@ type Config struct {
 	QuizCount       int
 	UploadDir       string
 	Title           string
+	FooterOwner     string
+	FooterLicense   string
+	FooterICP       string
 }
 
 func Load() Config {
@@ -26,6 +29,9 @@ func Load() Config {
 		QuizCount:       getenvInt("QUESTION_COUNT", 10),
 		UploadDir:       getenv("UPLOAD_DIR", "uploads"),
 		Title:           getenv("APP_TITLE", "计算机协会 · 招新答题"),
+		FooterOwner:     getenv("FOOTER_OWNER", "计算机协会 · 汕头职业技术学院"),
+		FooterLicense:   getenv("FOOTER_LICENSE", "开源协议：MIT"),
+		FooterICP:       getenv("FOOTER_ICP", ""),
 	}
 }
 

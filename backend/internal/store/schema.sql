@@ -54,3 +54,11 @@ CREATE TABLE IF NOT EXISTS backgrounds (
     active     BOOLEAN NOT NULL DEFAULT TRUE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+CREATE TABLE IF NOT EXISTS footer_settings (
+    id         INT PRIMARY KEY,
+    owner      TEXT NOT NULL DEFAULT '',
+    license    TEXT NOT NULL DEFAULT '',
+    icp        TEXT NOT NULL DEFAULT '',
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);

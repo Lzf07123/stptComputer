@@ -233,6 +233,22 @@ func (s *Service) Top(ctx context.Context, n int64) ([]rank.Entry, error) {
 	return s.rank.Top(ctx, n)
 }
 
+// ---------- footer ----------
+
+func (s *Service) Footer(ctx context.Context) (*store.Footer, error) {
+	return s.store.GetFooterSettings(ctx)
+}
+
+func (s *Service) SaveFooter(ctx context.Context, owner, license, icp string) error {
+	owner = strings.TrimSpace(owner)
+	license = strings.TrimSpace(license)
+	icp = strings.TrimSpace(icp)
+	if len([]rune(owner)) > 100 || len([]rune(license)) > 100 || len([]rune(icp)) > 50 {
+		return ErrBadRequest
+	}
+	return s.store.SaveFooterSettings(ctx, owner, license, icp)
+}
+
 // ---------- backgrounds ----------
 
 func (s *Service) Backgrounds(ctx context.Context) ([]store.Background, error) {

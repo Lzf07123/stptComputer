@@ -37,6 +37,10 @@ func main() {
 	}
 	pub := publish.New(cfg.RedisAddr)
 
+	if err := st.EnsureFooterDefaults(ctx, cfg.FooterOwner, cfg.FooterLicense, cfg.FooterICP); err != nil {
+		log.Fatalf("footer defaults: %v", err)
+	}
+
 	svc := quiz.New(st, rk, pub, cfg.Title)
 	hub := ws.NewHub(rk, pub.Subscribe(ctx))
 	go hub.Run(ctx)
