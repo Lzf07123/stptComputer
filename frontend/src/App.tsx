@@ -1,4 +1,4 @@
-import { Link, Route, Routes, useLocation } from 'react-router-dom'
+import { Link, Outlet, useLocation, createBrowserRouter } from 'react-router-dom'
 import Home from './pages/Home'
 import Join from './pages/Join'
 import Quiz from './pages/Quiz'
@@ -7,10 +7,9 @@ import Screen from './pages/Screen'
 import Admin from './pages/Admin'
 import Footer from './components/Footer'
 
-export default function App() {
+function Layout() {
   const { pathname } = useLocation()
   const fullscreen = pathname === '/screen'
-
   const isHome = pathname === '/'
 
   return (
@@ -26,16 +25,24 @@ export default function App() {
         </header>
       )}
       <main className="page">
-        <Routes>
-          <Route path="/" element={<Home />} />
-          <Route path="/join" element={<Join />} />
-          <Route path="/quiz" element={<Quiz />} />
-          <Route path="/result" element={<Result />} />
-          <Route path="/screen" element={<Screen />} />
-          <Route path="/admin" element={<Admin />} />
-        </Routes>
+        <Outlet />
       </main>
       {!fullscreen && <Footer />}
     </div>
   )
 }
+
+export const router = createBrowserRouter([
+  {
+    path: '/',
+    element: <Layout />,
+    children: [
+      { index: true, element: <Home /> },
+      { path: 'join', element: <Join /> },
+      { path: 'quiz', element: <Quiz /> },
+      { path: 'result', element: <Result /> },
+      { path: 'screen', element: <Screen /> },
+      { path: 'admin', element: <Admin /> },
+    ],
+  },
+])

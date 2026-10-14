@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Navigate } from 'react-router-dom'
+import { Navigate, useBlocker } from 'react-router-dom'
 import { api, clearToken, flushPending, getDeviceFP, getToken, loadPending, pushPending, setToken } from '../api/client'
 import { QuizSocket, wsURL } from '../ws/socket'
 
@@ -72,7 +72,8 @@ export default function Quiz() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase])
 
-  // 答题中离开页面提醒（关闭/刷新）
+  // 答题中离开页面提醒：
+  // 1) 关闭/刷新标签 → beforeunload
   useEffect(() => {
     if (phase !== 'quiz') return
     const h = (e: BeforeUnloadEvent) => {
@@ -82,6 +83,17 @@ export default function Quiz() {
     window.addEventListener('beforeunload', h)
     return () => window.removeEventListener('beforeunload', h)
   }, [phase])
+
+  // 2) 页内跳转 / 浏览器前进后退 → useBlocker 确认
+  const blocker = useBlocker(phase === 'quiz')
+  useEffect(() => {
+    if (blocker.state !== 'blocked') return
+    if (window.confirm('答题进行中，确定要离开本页吗？')) {
+      blocker.proceed()
+    } else {
+      blocker.reset()
+    }
+  }, [blocker])
 
   function enterRound(d: RoundResp, flashMsg: string) {
     setRoundNo(d.round_no)
