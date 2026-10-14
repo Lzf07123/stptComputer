@@ -1,0 +1,24 @@
+# 敏感信息
+.env
+.env.*
+!.env.example
+
+# 依赖与构建产物
+node_modules/
+dist/
+build/
+*.local
+
+# Go
+backend/bin/
+backend/vendor/
+
+# 日志与临时文件
+*.log
+.DS_Store
+tmp/
+coverage/
+
+# IDE
+.idea/
+.vscode/
