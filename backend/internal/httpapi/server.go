@@ -524,6 +524,18 @@ func (s *Server) handleAdminSetActive(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"id": id, "active": req.Active})
 }
 
+// csvSafe 防止 Excel/表格软件的公式注入（= + - @ 等开头加单引号转义）。
+func csvSafe(v string) string {
+	if v == "" {
+		return v
+	}
+	switch v[0] {
+	case '=', '+', '-', '@', '\t', '\r':
+		return "'" + v
+	}
+	return v
+}
+
 // ---------- admin: 导出成绩 CSV ----------
 
 func (s *Server) handleAdminExportScores(w http.ResponseWriter, r *http.Request) {
@@ -546,7 +558,7 @@ func (s *Server) handleAdminExportScores(w http.ResponseWriter, r *http.Request)
 			status = "已放弃"
 		}
 		_ = cw.Write([]string{
-			rankStr, row.Nickname,
+			rankStr, csvSafe(row.Nickname),
 			strconv.Itoa(row.Correct), strconv.Itoa(row.Answered), strconv.Itoa(row.Score),
 			fmt.Sprintf("%.1f", float64(row.ElapsedMS)/1000), strconv.Itoa(row.Rounds),
 			status, row.CreatedAt.Format("2006-01-02 15:04"),
