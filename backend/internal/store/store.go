@@ -426,6 +426,46 @@ func (s *Store) InsertAnnouncement(ctx context.Context, content, typ string) (*A
 	return a, nil
 }
 
+// ---------- export ----------
+
+func (s *Store) ListAllUsers(ctx context.Context) ([]User, error) {
+	rows, err := s.pool.Query(ctx,
+		`SELECT id, nickname, token, device_fp, abandoned, created_at FROM users ORDER BY id`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []User{}
+	for rows.Next() {
+		var u User
+		if err := rows.Scan(&u.ID, &u.Nickname, &u.Token, &u.DeviceFP, &u.Abandoned, &u.CreatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, u)
+	}
+	return out, rows.Err()
+}
+
+// RoundCounts 返回 user_id → 答题轮数。
+func (s *Store) RoundCounts(ctx context.Context) (map[int64]int, error) {
+	rows, err := s.pool.Query(ctx,
+		`SELECT user_id, COUNT(DISTINCT round_no) FROM attempts GROUP BY user_id`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[int64]int{}
+	for rows.Next() {
+		var uid int64
+		var n int
+		if err := rows.Scan(&uid, &n); err != nil {
+			return nil, err
+		}
+		out[uid] = n
+	}
+	return out, rows.Err()
+}
+
 // ---------- overview ----------
 
 func (s *Store) Ping(ctx context.Context) error { return s.pool.Ping(ctx) }

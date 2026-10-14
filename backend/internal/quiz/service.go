@@ -8,7 +8,9 @@ import (
 	"errors"
 	"fmt"
 	mathrand "math/rand"
+	"sort"
 	"strings"
+	"time"
 
 	"stpt/quiz/internal/publish"
 	"stpt/quiz/internal/rank"
@@ -530,6 +532,70 @@ func (s *Service) Overview(ctx context.Context, online int64) (*Overview, error)
 		Online: online, Questions: questions, Backgrounds: bgs,
 		DB: db, Redis: redisStatus,
 	}, nil
+}
+
+// ---------- export scores ----------
+
+type ScoreRow struct {
+	Rank      int64     `json:"rank"`
+	Nickname  string    `json:"nickname"`
+	Correct   int       `json:"correct"`
+	Answered  int       `json:"answered"`
+	ElapsedMS int64     `json:"elapsed_ms"`
+	Score     int       `json:"score"`
+	Rounds    int       `json:"rounds"`
+	Abandoned bool      `json:"abandoned"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+// ExportScores 导出全部用户的最高成绩（按榜单名次，未上榜按注册顺序排后）。
+func (s *Service) ExportScores(ctx context.Context) ([]ScoreRow, error) {
+	users, err := s.store.ListAllUsers(ctx)
+	if err != nil {
+		return nil, err
+	}
+	rounds, err := s.store.RoundCounts(ctx)
+	if err != nil {
+		return nil, err
+	}
+	entries, err := s.rank.Top(ctx, 100000)
+	if err != nil {
+		return nil, err
+	}
+	pos := map[string]int64{}
+	for i, e := range entries {
+		pos[e.UserID] = int64(i + 1)
+	}
+	ranked := []ScoreRow{}
+	unranked := []ScoreRow{}
+	for _, u := range users {
+		st, err := s.store.BestRoundStats(ctx, u.ID)
+		if err != nil {
+			continue
+		}
+		elapsed := int64(0)
+		if st.Count > 0 {
+			elapsed = st.Last.Sub(st.First).Milliseconds()
+		}
+		row := ScoreRow{
+			Nickname:  u.Nickname,
+			Correct:   st.Correct,
+			Answered:  st.Count,
+			ElapsedMS: elapsed,
+			Score:     st.Correct * 10,
+			Rounds:    rounds[u.ID],
+			Abandoned: u.Abandoned,
+			CreatedAt: u.CreatedAt,
+		}
+		if p, ok := pos[fmt.Sprint(u.ID)]; ok {
+			row.Rank = p
+			ranked = append(ranked, row)
+		} else {
+			unranked = append(unranked, row)
+		}
+	}
+	sort.Slice(ranked, func(i, j int) bool { return ranked[i].Rank < ranked[j].Rank })
+	return append(ranked, unranked...), nil
 }
 
 // ---------- difficulty ----------

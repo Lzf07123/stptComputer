@@ -1,9 +1,11 @@
 package httpapi
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/subtle"
+	"encoding/csv"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -63,6 +65,9 @@ func (s *Server) Handler() http.Handler {
 	// 后台（X-Admin-Token）
 	mux.HandleFunc("POST /api/admin/quiz-state", s.withAdmin(s.handleAdminState))
 	mux.HandleFunc("GET /api/admin/overview", s.withAdmin(s.handleAdminOverview))
+	mux.HandleFunc("GET /api/admin/export/scores", s.withAdmin(s.handleAdminExportScores))
+	mux.HandleFunc("POST /api/admin/questions/import", s.withAdmin(s.handleAdminImportQuestions))
+	mux.HandleFunc("GET /api/admin/questions/template", s.withAdmin(s.handleAdminQuestionsTemplate))
 	mux.HandleFunc("POST /api/admin/announce", s.withAdmin(s.handleAdminAnnounce))
 	mux.HandleFunc("POST /api/admin/effect", s.withAdmin(s.handleAdminEffect))
 	mux.HandleFunc("POST /api/admin/qrcode", s.withAdmin(s.handleAdminQrcode))
@@ -517,6 +522,127 @@ func (s *Server) handleAdminSetActive(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"id": id, "active": req.Active})
+}
+
+// ---------- admin: 导出成绩 CSV ----------
+
+func (s *Server) handleAdminExportScores(w http.ResponseWriter, r *http.Request) {
+	rows, err := s.svc.ExportScores(r.Context())
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	var buf bytes.Buffer
+	buf.WriteString("\xEF\xBB\xBF") // UTF-8 BOM，Excel 中文兼容
+	cw := csv.NewWriter(&buf)
+	_ = cw.Write([]string{"排名", "昵称", "答对", "已答", "得分", "用时(秒)", "轮数", "状态", "注册时间"})
+	for _, row := range rows {
+		rankStr := "-"
+		if row.Rank > 0 {
+			rankStr = strconv.FormatInt(row.Rank, 10)
+		}
+		status := "活跃"
+		if row.Abandoned {
+			status = "已放弃"
+		}
+		_ = cw.Write([]string{
+			rankStr, row.Nickname,
+			strconv.Itoa(row.Correct), strconv.Itoa(row.Answered), strconv.Itoa(row.Score),
+			fmt.Sprintf("%.1f", float64(row.ElapsedMS)/1000), strconv.Itoa(row.Rounds),
+			status, row.CreatedAt.Format("2006-01-02 15:04"),
+		})
+	}
+	cw.Flush()
+	w.Header().Set("Content-Type", "text/csv; charset=utf-8")
+	w.Header().Set("Content-Disposition",
+		fmt.Sprintf(`attachment; filename="scores-%s.csv"`, time.Now().Format("20060102-150405")))
+	_, _ = w.Write(buf.Bytes())
+}
+
+// ---------- admin: 批量导入题目 CSV ----------
+
+func (s *Server) handleAdminQuestionsTemplate(w http.ResponseWriter, r *http.Request) {
+	var buf bytes.Buffer
+	buf.WriteString("\xEF\xBB\xBF")
+	cw := csv.NewWriter(&buf)
+	_ = cw.Write([]string{"题目", "选项A", "选项B", "选项C", "选项D", "选项E", "选项F", "正确答案", "难度", "分值"})
+	_ = cw.Write([]string{"示例：二进制 1010 对应的十进制是？", "8", "9", "10", "12", "", "", "C", "容易", "10"})
+	cw.Flush()
+	w.Header().Set("Content-Type", "text/csv; charset=utf-8")
+	w.Header().Set("Content-Disposition", `attachment; filename="questions-template.csv"`)
+	_, _ = w.Write(buf.Bytes())
+}
+
+func (s *Server) handleAdminImportQuestions(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, 5<<20)
+	if err := r.ParseMultipartForm(5 << 20); err != nil {
+		writeErr(w, http.StatusBadRequest, "文件过大或格式错误（上限 5MB）")
+		return
+	}
+	file, _, err := r.FormFile("file")
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, "缺少 file 字段")
+		return
+	}
+	defer file.Close()
+	recs, err := csv.NewReader(file).ReadAll()
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, "CSV 解析失败："+err.Error())
+		return
+	}
+
+	imported := 0
+	failed := []map[string]any{}
+	for i, rec := range recs {
+		line := i + 1
+		if i == 0 && strings.Contains(rec[0], "题目") {
+			continue
+		}
+		content := strings.TrimSpace(rec[0])
+		if content == "" || strings.HasPrefix(content, "示例") {
+			continue
+		}
+		var opts []string
+		for _, o := range rec[1:7] {
+			if strings.TrimSpace(o) != "" {
+				opts = append(opts, strings.TrimSpace(o))
+			}
+		}
+		if len(opts) > 0 && len(rec) > 7 {
+			// 兼容「正确答案」放在末列的情况
+		}
+		ansCol := ""
+		difficulty := "简单"
+		score := 10
+		if len(rec) > 7 {
+			ansCol = strings.TrimSpace(rec[7])
+		} else if len(opts) > 0 {
+			ansCol = strings.TrimSpace(rec[len(rec)-1])
+		}
+		if len(rec) > 8 {
+			if d := strings.TrimSpace(rec[8]); d != "" {
+				difficulty = d
+			}
+		}
+		if len(rec) > 9 {
+			if v, err := strconv.Atoi(strings.TrimSpace(rec[9])); err == nil && v > 0 {
+				score = v
+			}
+		}
+		answerIdx := -1
+		if u := strings.ToUpper(ansCol); len(u) == 1 && u[0] >= 'A' && u[0] <= 'F' {
+			answerIdx = int(u[0] - 'A')
+		} else if n, err := strconv.Atoi(ansCol); err == nil {
+			answerIdx = n
+		}
+		_, cerr := s.svc.CreateQuestion(r.Context(), content, opts, answerIdx, score, 0, difficulty)
+		if cerr != nil {
+			failed = append(failed, map[string]any{"line": line, "error": cerr.Error()})
+			continue
+		}
+		imported++
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"imported": imported, "failed": failed})
 }
 
 // ---------- admin: overview（资源与访问情况） ----------

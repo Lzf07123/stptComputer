@@ -221,6 +221,54 @@ export default function Admin() {
     }
   }
 
+  // 下载受口令保护的文件
+  const download = async (path: string, fallbackName: string) => {
+    try {
+      const res = await fetch(path, { headers: { 'X-Admin-Token': pass } })
+      if (!res.ok) {
+        const b = await res.json().catch(() => ({ error: `HTTP ${res.status}` }))
+        setMsg(`✘ ${b.error || `HTTP ${res.status}`}`)
+        return
+      }
+      const blob = await res.blob()
+      const a = document.createElement('a')
+      a.href = URL.createObjectURL(blob)
+      a.download = fallbackName
+      a.click()
+      URL.revokeObjectURL(a.href)
+      setMsg('✔ 下载已开始')
+    } catch (e) {
+      setMsg(`✘ ${(e as Error).message}`)
+    }
+  }
+
+  // 批量导入题目 CSV
+  const importQuestions = async (f: File) => {
+    const fd = new FormData()
+    fd.append('file', f)
+    try {
+      const res = await fetch('/api/admin/questions/import', {
+        method: 'POST',
+        headers: { 'X-Admin-Token': pass },
+        body: fd,
+      })
+      const d = await res.json().catch(() => ({ error: '导入失败' }))
+      if (!res.ok) {
+        setMsg(`✘ ${d.error || '导入失败'}`)
+        return
+      }
+      const failed = (d.failed || []) as Array<{ line: number; error: string }>
+      if (failed.length) {
+        setMsg(`✘ 导入完成：成功 ${d.imported} 题；失败 ${failed.length} 行（第 ${failed.map((x) => x.line).join('、')} 行）`)
+      } else {
+        setMsg(`✔ 导入成功：${d.imported} 题`)
+      }
+      void reload()
+    } catch (e) {
+      setMsg(`✘ ${(e as Error).message}`)
+    }
+  }
+
   async function act(path: string, body: any, okMsg: string) {
     try {
       await api(path, { method: 'POST', headers: adminHeaders(), body: JSON.stringify(body) })
@@ -364,6 +412,17 @@ export default function Admin() {
             )}
           </div>
 
+          <div className="admin-panel">
+            <h3>数据导出</h3>
+            <p className="muted">导出全部用户最高成绩 CSV（Excel 可直接打开）</p>
+            <button
+              className="btn btn-secondary"
+              onClick={() => void download('/api/admin/export/scores', `scores-${Date.now()}.csv`)}
+            >
+              导出成绩
+            </button>
+          </div>
+
       </div>
       </div>
       )}
@@ -488,6 +547,28 @@ export default function Admin() {
       <div className="card">
         <h3>题库（{questions.length}）</h3>
         <div className="admin-grid">
+          <div className="admin-panel">
+            <h3>批量导入题目</h3>
+            <p className="muted">
+              CSV 列：题目, 选项A~F, 正确答案(A-F), 难度, 分值。题目以「示例」开头的行自动跳过。
+            </p>
+            <div className="field-actions">
+              <button className="btn" onClick={() => void download('/api/admin/questions/template', 'questions-template.csv')}>
+                下载模板
+              </button>
+              <label className="field">
+                <input
+                  type="file"
+                  accept=".csv,text/csv"
+                  onChange={(e) => {
+                    const f = e.target.files && e.target.files[0]
+                    if (f) void importQuestions(f)
+                  }}
+                />
+              </label>
+            </div>
+          </div>
+
           <div className="admin-panel">
             <h3>新增题目</h3>
             <label className="field">
