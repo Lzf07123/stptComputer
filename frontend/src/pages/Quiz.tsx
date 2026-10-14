@@ -296,6 +296,8 @@ export default function Quiz() {
     setSelected(null)
     locked.current = false
     if (idx + 1 >= questions.length) {
+      // 答题结束跳转成绩页：主动放行，不弹离开确认
+      allowLeaveRef.current = true
       setPhase('done')
     } else {
       setIdx(idx + 1)
