@@ -223,7 +223,11 @@ body {
 }
 .diff-opt:hover { border-color: var(--blue); color: var(--text); }
 .diff-opt.on { border-color: var(--blue); color: #fff; background: rgba(37, 99, 235, 0.25); }
-.ov-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 10px; margin: 14px 0; }
+.ov-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px; margin: 14px 0; }
+@media (min-width: 1200px) {
+  .ov-grid { grid-template-columns: repeat(6, 1fr); }
+  .admin-grid { grid-template-columns: repeat(3, 1fr); }
+}
 .ov-item {
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -456,6 +460,21 @@ select {
 
 /* ---------- 后台 ---------- */
 .admin { max-width: 980px; margin: 0 auto; }
+.admin-top { max-width: 980px; margin: 0 auto 14px; padding: 18px 24px; }
+.admin-top-inner { display: flex; justify-content: space-between; align-items: center; }
+.admin-top-inner h2 { margin: 0; }
+.admin-tabs { display: flex; gap: 8px; flex-wrap: wrap; margin: 0 auto 14px; }
+.admin-tab {
+  border: 2px solid var(--border);
+  background: transparent;
+  color: var(--muted);
+  border-radius: 8px;
+  padding: 10px 22px;
+  cursor: pointer;
+  font-size: 15px;
+}
+.admin-tab:hover { border-color: var(--blue); color: var(--text); }
+.admin-tab.on { border-color: var(--blue); color: #fff; background: rgba(37, 99, 235, 0.22); }
 .admin-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; margin-top: 16px; }
 .admin-panel { border: 2px solid var(--border); border-radius: 6px; padding: 16px; }
 .admin-panel h3 { margin: 0 0 12px; font-size: 15px; color: var(--green); letter-spacing: 1px; }
@@ -536,7 +555,12 @@ select {
   .screen-head { flex-direction: column; align-items: flex-start; gap: 12px; }
   .srow { padding: 8px 12px; gap: 10px; }
   .announce-banner { font-size: 16px; }
-  .admin-grid { grid-template-columns: 1fr; }
+  .admin-grid { grid-template-columns: 1fr; gap: 10px; }
+  .admin-tab { flex: 1 1 40%; text-align: center; padding: 12px 8px; }
+  .admin .btn, .admin .mini-btn { min-height: 44px; }
+  .admin .mini-btn { min-height: 40px; padding: 6px 14px; }
+  .admin input, .admin select, .admin textarea { font-size: 16px; } /* 防 iOS 聚焦缩放 */
+  .qlist { max-height: 300px; }
 }
 
 /* ---------- 放弃身份二次确认模态 ---------- */

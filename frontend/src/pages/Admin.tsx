@@ -37,6 +37,7 @@ export default function Admin() {
   const [pass, setPass] = useState(() => sessionStorage.getItem('admin_pass') || '')
   const [verified, setVerified] = useState(false)
   const [ov, setOv] = useState<OvResp | null>(null)
+  const [tab, setTab] = useState<'overview' | 'control' | 'questions' | 'appearance'>('control')
   const [msg, setMsg] = useState('')
   const [questions, setQuestions] = useState<Question[]>([])
   const [content, setContent] = useState('')
@@ -77,6 +78,13 @@ export default function Admin() {
   const submitPass = () => {
     sessionStorage.setItem('admin_pass', pass)
     void verify(pass)
+  }
+
+  const logout = () => {
+    sessionStorage.removeItem('admin_pass')
+    setVerified(false)
+    setOv(null)
+    setPass('')
   }
 
   // 概览 10s 自动刷新
@@ -253,28 +261,36 @@ export default function Admin() {
     )
   }
 
+  const TABS = [
+    { key: 'overview', label: '概览' },
+    { key: 'control', label: '控制台' },
+    { key: 'questions', label: '题库' },
+    { key: 'appearance', label: '外观' },
+  ] as const
+
   return (
     <section className="admin">
-      <div className="card">
-        <h2>后台管理</h2>
-        <p className="muted">
-          已验证通过
-          <button
-            className="mini-btn"
-            style={{ marginLeft: 8 }}
-            onClick={() => {
-              sessionStorage.removeItem('admin_pass')
-              setVerified(false)
-              setOv(null)
-              setPass('')
-            }}
-          >
+      <div className="card admin-top">
+        <div className="admin-top-inner">
+          <h2>后台管理</h2>
+          <button className="mini-btn" onClick={logout}>
             退出验证
           </button>
-        </p>
+        </div>
         {msg && <p className={`flash${msg.startsWith('✔') ? '' : ' error'}`}>{msg}</p>}
+      </div>
 
-        {ov && (
+      <nav className="admin-tabs">
+        {TABS.map((t) => (
+          <button key={t.key} className={`admin-tab${tab === t.key ? ' on' : ''}`} onClick={() => setTab(t.key)}>
+            {t.label}
+          </button>
+        ))}
+      </nav>
+
+      {tab === 'overview' && ov && (
+        <div className="card">
+          <h3>系统概览</h3>
           <div className="ov-grid">
             <div className="ov-item"><b>{ov.overview.users}</b><span>注册用户</span></div>
             <div className="ov-item"><b>{ov.overview.participants}</b><span>参与答题</span></div>
@@ -288,9 +304,12 @@ export default function Admin() {
             <div className={`ov-item ${ov.overview.db === 'ok' ? 'ok' : 'bad'}`}><b>{ov.overview.db}</b><span>数据库</span></div>
             <div className={`ov-item ${ov.overview.redis === 'ok' ? 'ok' : 'bad'}`}><b>{ov.overview.redis}</b><span>Redis</span></div>
           </div>
-        )}
+        </div>
+      )}
 
-        <div className="admin-grid">
+      {tab === 'control' && (
+        <div className="card">
+          <div className="admin-grid">
           <div className="admin-panel">
             <h3>答题控制</h3>
             <button className="btn btn-accent" onClick={() => void act('/api/admin/quiz-state', { state: 'start' }, '答题已开始')}>
@@ -345,6 +364,13 @@ export default function Admin() {
             )}
           </div>
 
+      </div>
+      </div>
+      )}
+
+      {tab === 'appearance' && (
+        <div className="card">
+          <div className="admin-grid">
           <div className="admin-panel">
             <h3>页脚信息</h3>
             <label className="field">
@@ -456,7 +482,9 @@ export default function Admin() {
           </div>
         </div>
       </div>
+      )}
 
+      {tab === 'questions' && (
       <div className="card">
         <h3>题库（{questions.length}）</h3>
         <div className="admin-grid">
@@ -526,6 +554,7 @@ export default function Admin() {
           </div>
         </div>
       </div>
+      )}
     </section>
   )
 }
