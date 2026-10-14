@@ -68,7 +68,7 @@ export default function Screen() {
         </div>
       </header>
 
-      {announce && <div className="announce-banner">{announce}</div>}
+      {announce && <div className="announce-banner"><span>{announce}</span></div>}
 
       <ol className="screen-rank">
         {top.map((e, i) => (

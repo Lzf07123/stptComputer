@@ -28,8 +28,8 @@ export default function ParticlesBg() {
         detectRetina: true,
         particles: {
           number: { value: 80, density: { enable: true } },
-          color: { value: '#22d3ee' },
-          links: { enable: true, color: '#155e75', distance: 140 },
+          color: { value: '#22c55e' },
+          links: { enable: true, color: '#3b82f6', distance: 140 },
           move: { enable: true, speed: 1.2 },
           opacity: { value: 0.5 },
           size: { value: 2 },

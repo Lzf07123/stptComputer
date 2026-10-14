@@ -10,12 +10,12 @@ export default function Home() {
         <ParticlesBg />
       </Suspense>
       <div className="home-inner">
-        <p className="eyebrow fade-in">STPT · 2026 招新季</p>
+        <p className="eyebrow fade-in">STPT-2026 · QUIZ CHALLENGE</p>
         <h1 className="fade-in d1">计算机协会</h1>
         <p className="subtitle fade-in d2">答题挑战 · 实时排行 · 现场大奖</p>
         <div className="home-actions fade-in d3">
-          <Link className="btn btn-primary" to="/join">加入群聊</Link>
-          <Link className="btn btn-accent" to="/quiz">开始答题</Link>
+          <Link className="btn btn-secondary" to="/join">加入群聊</Link>
+          <Link className="btn btn-primary" to="/quiz">开始答题</Link>
         </div>
       </div>
     </section>
