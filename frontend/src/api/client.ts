@@ -81,7 +81,10 @@ export async function flushPending(): Promise<number> {
     try {
       await api('/api/answer', { method: 'POST', body: JSON.stringify(a) })
       ok++
-    } catch {
+    } catch (e) {
+      const err = e as Error & { status?: number }
+      // 身份已失效（token 401）：缓存的答案永远无法提交，丢弃；其余错误保留重试
+      if (err.status === 401) continue
       rest.push(a)
     }
   }

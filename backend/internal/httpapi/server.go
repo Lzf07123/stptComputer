@@ -116,7 +116,11 @@ func (s *Server) withUser(next userHandler) http.HandlerFunc {
 		}
 		u, err := s.svc.ValidateToken(r.Context(), tok)
 		if err != nil {
-			writeErr(w, http.StatusUnauthorized, "token 无效")
+			if errors.Is(err, store.ErrNotFound) {
+				writeErr(w, http.StatusUnauthorized, "token 无效")
+			} else {
+				writeErr(w, http.StatusUnauthorized, err.Error()) // 如「身份已放弃」
+			}
 			return
 		}
 		next(w, r, u)

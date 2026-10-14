@@ -137,6 +137,19 @@ export default function Quiz() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // 身份失效（token 401）：静默清理并回到本机身份界面
+  const authLost = () => {
+    clearToken()
+    sessionStorage.removeItem('quiz_nick')
+    setMyNick('')
+    setNeedsNewRound(false)
+    sockRef.current?.close()
+    setFlash('原答题身份已失效，请重新进入')
+    setError('')
+    setPhase('name')
+    void checkBound()
+  }
+
   async function resume() {
     setPhase('loading')
     try {
@@ -161,14 +174,23 @@ export default function Quiz() {
           setPhase('quiz')
           return
         }
-      } catch {
+      } catch (e) {
+        if ((e as Error & { status?: number }).status === 401) {
+          authLost()
+          return
+        }
         /* 无进行中轮次 → 选难度开新轮 */
       }
       setNeedsNewRound(true)
       setPhase('name')
     } catch (e) {
-      clearToken()
-      setError((e as Error).message)
+      const err = e as Error & { status?: number }
+      if (err.status === 401) {
+        authLost()
+        return
+      }
+      // 非身份问题（网络/服务器瞬时错误）：保留 token，提示可重试
+      setError(`${err.message}（可刷新重试）`)
       setPhase('name')
     }
   }
