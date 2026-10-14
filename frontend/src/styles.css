@@ -528,3 +528,28 @@ select {
   .announce-banner { font-size: 16px; }
   .admin-grid { grid-template-columns: 1fr; }
 }
+
+/* ---------- 放弃身份二次确认模态 ---------- */
+.modal-veil {
+  position: fixed;
+  inset: 0;
+  background: rgba(6, 10, 22, 0.72);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  padding: 20px;
+}
+.modal {
+  background: var(--bg2);
+  border: 2px solid var(--border);
+  border-radius: 12px;
+  padding: 24px;
+  max-width: 440px;
+  width: 100%;
+  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.55);
+}
+.modal h3 { margin: 0 0 14px; color: var(--red); }
+.side-effects { margin: 0 0 18px; padding-left: 18px; color: var(--text); font-size: 14px; line-height: 2; }
+.side-effects b { color: var(--red); }
+.modal-actions { display: flex; gap: 10px; justify-content: flex-end; }

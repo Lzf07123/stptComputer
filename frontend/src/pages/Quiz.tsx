@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Navigate, useBlocker } from 'react-router-dom'
 import { api, clearToken, flushPending, getDeviceFP, getToken, loadPending, pushPending, setToken } from '../api/client'
 import { QuizSocket, wsURL } from '../ws/socket'
@@ -43,6 +43,7 @@ export default function Quiz() {
   const [boundNick, setBoundNick] = useState<string | null>(null)
   const [needsNewRound, setNeedsNewRound] = useState(false)
   const [difficulty, setDifficulty] = useState('全部')
+  const [abandonReq, setAbandonReq] = useState<{ byDevice: boolean; step: 'ask' | 'final' } | null>(null)
   const locked = useRef(false)
   const sockRef = useRef<QuizSocket | null>(null)
 
@@ -209,6 +210,16 @@ export default function Quiz() {
     }
   }
 
+  // 二次确认入口
+  const requestAbandon = (byDevice: boolean) => setAbandonReq({ byDevice, step: 'ask' })
+
+  const confirmAbandon = async () => {
+    if (!abandonReq) return
+    const byDevice = abandonReq.byDevice
+    setAbandonReq(null)
+    await abandonIdentity(byDevice)
+  }
+
   // 放弃当前身份：解除设备绑定，本机可重新注册
   const abandonIdentity = async (byDevice: boolean) => {
     try {
@@ -304,10 +315,26 @@ export default function Quiz() {
   if (phase === 'done') return <Navigate to="/result" replace />
 
   const q = phase === 'quiz' ? questions[idx] : null
+  const total = questions.length
 
+  const diffPicker = (
+    <div className="diff-picker">
+      {['全部', '容易', '简单', '困难'].map((d) => (
+        <button
+          key={d}
+          type="button"
+          className={`diff-opt${difficulty === d ? ' on' : ''}`}
+          onClick={() => setDifficulty(d)}
+        >
+          {d}
+        </button>
+      ))}
+    </div>
+  )
+
+  let body: ReactNode
   if (phase === 'quiz' && q) {
-    const total = questions.length
-    return (
+    body = (
       <section className="quiz-wrap">
         <div className="quiz-head">
           <span className="muted">
@@ -317,7 +344,7 @@ export default function Quiz() {
           </span>
           <span className="quiz-head-right">
             <span className={`timer${seconds <= 5 ? ' danger' : ''}`}>{seconds}s</span>
-            <button className="mini-quit" onClick={() => void abandonIdentity(false)}>
+            <button className="mini-quit" onClick={() => requestAbandon(false)}>
               放弃身份
             </button>
           </span>
@@ -349,34 +376,14 @@ export default function Quiz() {
         {flash && <p className="flash">{flash}</p>}
       </section>
     )
-  }
-
-  if (phase === 'loading') {
-    return (
+  } else if (phase === 'loading') {
+    body = (
       <section className="card center">
         <p className="muted">加载中…</p>
       </section>
     )
-  }
-
-  const diffPicker = (
-    <div className="diff-picker">
-      {['全部', '容易', '简单', '困难'].map((d) => (
-        <button
-          key={d}
-          type="button"
-          className={`diff-opt${difficulty === d ? ' on' : ''}`}
-          onClick={() => setDifficulty(d)}
-        >
-          {d}
-        </button>
-      ))}
-    </div>
-  )
-
-  // ---- 新一轮（已有身份）：先选难度 ----
-  if (needsNewRound) {
-    return (
+  } else if (needsNewRound) {
+    body = (
       <section className="card center">
         <h2>新一轮答题</h2>
         <p className="muted">答题前请选择本局难度（历史最佳成绩仍保留）</p>
@@ -387,61 +394,109 @@ export default function Quiz() {
         {error && <p className="error">{error}</p>}
       </section>
     )
-  }
-
-  // ---- 注册 / 恢复身份 ----
-  return (
-    <section className="card center">
-      <h2>开始答题</h2>
-      {boundNick ? (
-        <div className="bound-box">
-          <p>本机已有答题身份</p>
-          <p className="bound-nick">「{boundNick}」</p>
-          <div className="bound-actions">
-            <button className="btn btn-primary" onClick={() => void start(boundNick)}>
-              恢复此身份
-            </button>
-            <button className="btn" onClick={() => void abandonIdentity(true)}>
-              放弃并注册新身份
+  } else {
+    body = (
+      <section className="card center">
+        <h2>开始答题</h2>
+        {boundNick ? (
+          <div className="bound-box">
+            <p>本机已有答题身份</p>
+            <p className="bound-nick">「{boundNick}」</p>
+            <div className="bound-actions">
+              <button className="btn btn-primary" onClick={() => void start(boundNick)}>
+                恢复此身份
+              </button>
+              <button className="btn" onClick={() => requestAbandon(true)}>
+                放弃并注册新身份
+              </button>
+            </div>
+          </div>
+        ) : (
+          <>
+            <p className="muted">输入昵称领取你的答题身份（每人限领一次）</p>
+            {diffPicker}
+            <form
+              className="name-form"
+              onSubmit={(e) => {
+                e.preventDefault()
+                void start()
+              }}
+            >
+              <input
+                value={nickname}
+                onChange={(e) => setNickname(e.target.value)}
+                placeholder="输入昵称（1-16 字）"
+                maxLength={16}
+                autoFocus
+              />
+              <button className="btn btn-primary" type="submit">
+                进入答题
+              </button>
+            </form>
+          </>
+        )}
+        {identityConflict && (
+          <div className="conflict-box">
+            <p className="error">{identityConflict}</p>
+            <button className="btn" onClick={() => requestAbandon(true)}>
+              放弃原身份，重新注册
             </button>
           </div>
+        )}
+        {error && <p className="error">{error}</p>}
+        {loadPending().length > 0 && getToken() === null && (
+          <p className="muted">检测到 {loadPending().length} 条未提交答案，答题后将自动补交</p>
+        )}
+      </section>
+    )
+  }
+
+  return (
+    <>
+      {body}
+      {abandonReq && (
+        <div className="modal-veil" onClick={() => setAbandonReq(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            {abandonReq.step === 'ask' ? (
+              <>
+                <h3>放弃当前答题身份？</h3>
+                <ul className="side-effects">
+                  <li>身份将<b>立即失效</b>，无法再登录或继续答题</li>
+                  <li>昵称「{myNick || boundNick || '当前身份'}」将<b>永久封存</b>，任何人（含本人）无法再次使用</li>
+                  <li>排行榜中的<b>历史记录保留</b>，将作为足迹继续展示</li>
+                  <li>历史答题保留，参与人次统计不受影响</li>
+                  <li>本机解除绑定，可重新注册<b>全新</b>身份</li>
+                </ul>
+                <div className="modal-actions">
+                  <button className="btn" onClick={() => setAbandonReq(null)}>取消</button>
+                  <button
+                    className="btn btn-primary"
+                    onClick={() => setAbandonReq({ ...abandonReq, step: 'final' })}
+                  >
+                    继续
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <h3>最后确认</h3>
+                <p className="muted">
+                  放弃操作<b>不可撤销</b>：身份立即失效，昵称「{myNick || boundNick || '当前身份'}」永久不可再用。
+                  确定要放弃吗？
+                </p>
+                <div className="modal-actions">
+                  <button className="btn" onClick={() => setAbandonReq({ ...abandonReq, step: 'ask' })}>
+                    返回
+                  </button>
+                  <button className="btn btn-primary" onClick={() => void confirmAbandon()}>
+                    确认放弃
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
         </div>
-      ) : (
-        <>
-          <p className="muted">输入昵称领取你的答题身份（每人限领一次）</p>
-          {diffPicker}
-          <form
-            className="name-form"
-            onSubmit={(e) => {
-              e.preventDefault()
-              void start()
-            }}
-          >
-            <input
-              value={nickname}
-              onChange={(e) => setNickname(e.target.value)}
-              placeholder="输入昵称（1-16 字）"
-              maxLength={16}
-              autoFocus
-            />
-            <button className="btn btn-primary" type="submit">
-              进入答题
-            </button>
-          </form>
-        </>
       )}
-      {identityConflict && (
-        <div className="conflict-box">
-          <p className="error">{identityConflict}</p>
-          <button className="btn" onClick={() => void abandonIdentity(true)}>
-            放弃原身份，重新注册
-          </button>
-        </div>
-      )}
-      {error && <p className="error">{error}</p>}
-      {loadPending().length > 0 && getToken() === null && (
-        <p className="muted">检测到 {loadPending().length} 条未提交答案，答题后将自动补交</p>
-      )}
-    </section>
+    </>
   )
 }
