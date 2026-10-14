@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"stpt/quiz/internal/publish"
@@ -288,7 +289,8 @@ func (s *Service) Submit(ctx context.Context, userID int64, requestID string, qu
 		return nil, -1, false, err
 	}
 	if !duplicate {
-		s.refreshRank(ctx, userID)
+		// 异步刷新排行榜，不阻塞答题提交关键路径
+		go s.refreshRank(context.WithoutCancel(ctx), userID)
 	}
 	return att, correctIndex(*q, userID, roundNo), duplicate, nil
 }
@@ -351,21 +353,32 @@ func (s *Service) MyStats(ctx context.Context, userID int64) (*MyStats, error) {
 	}, nil
 }
 
-// Top 供 WebSocket 推送使用：全量排行榜前 n 名（包含未答题者）。
-func (s *Service) Top(ctx context.Context, n int64) ([]rank.Entry, error) {
-	entries, _, err := s.Leaderboard(ctx, int(n))
-	return entries, err
-}
+// 全量榜缓存：读写分离 + 后台定时刷新；读请求永不被 DB 查询阻塞，
+// 高并发下每 1s 最多一次 DB 聚合，WS 推送/轮询/个人名次共用。
+var (
+	lbMu    sync.RWMutex
+	lbCache = struct {
+		entries []rank.Entry
+		total   int64
+		at      time.Time
+	}{}
+	lbRefreshMu sync.Mutex
+	lbTTL       = 1 * time.Second
+)
 
-// Leaderboard 返回前 limit 名与总人数（limit<=0 返回全部）。
-func (s *Service) Leaderboard(ctx context.Context, limit int) ([]rank.Entry, int64, error) {
-	rows, err := s.store.Leaderboard(ctx, limit)
-	if err != nil {
-		return nil, 0, err
+func (s *Service) refreshLeaderboard(ctx context.Context) {
+	lbRefreshMu.Lock()
+	defer lbRefreshMu.Unlock()
+	// 单飞：获取刷新锁后复查新鲜度，避免过期瞬间大量请求各自重查库
+	lbMu.RLock()
+	fresh := lbCache.entries != nil && time.Since(lbCache.at) < lbTTL
+	lbMu.RUnlock()
+	if fresh {
+		return
 	}
-	total, err := s.store.CountAllUsers(ctx)
+	rows, total, err := s.store.Leaderboard(ctx)
 	if err != nil {
-		return nil, 0, err
+		return
 	}
 	entries := make([]rank.Entry, 0, len(rows))
 	for _, r := range rows {
@@ -376,21 +389,73 @@ func (s *Service) Leaderboard(ctx context.Context, limit int) ([]rank.Entry, int
 			ElapsedMS: r.ElapsedMS,
 		})
 	}
+	lbMu.Lock()
+	lbCache.entries, lbCache.total, lbCache.at = entries, total, time.Now()
+	lbMu.Unlock()
+}
+
+// StartLeaderboardRefresh 启动后台刷新（main 中调用一次）。
+func (s *Service) StartLeaderboardRefresh(ctx context.Context) {
+	go func() {
+		s.refreshLeaderboard(ctx) // 首次同步，避免启动即空
+		t := time.NewTicker(lbTTL)
+		defer t.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-t.C:
+				s.refreshLeaderboard(ctx)
+			}
+		}
+	}()
+}
+
+func (s *Service) fullLeaderboard(ctx context.Context) ([]rank.Entry, int64, error) {
+	// 读请求永不阻塞：有数据即返回（即使刚过期，后台会刷新）；无数据才同步刷新一次
+	lbMu.RLock()
+	if lbCache.entries != nil {
+		e, t := lbCache.entries, lbCache.total
+		lbMu.RUnlock()
+		return e, t, nil
+	}
+	lbMu.RUnlock()
+	s.refreshLeaderboard(ctx)
+	lbMu.RLock()
+	defer lbMu.RUnlock()
+	return lbCache.entries, lbCache.total, nil
+}
+
+// Top 供 WebSocket 推送使用：全量排行榜前 n 名（包含未答题者）。
+func (s *Service) Top(ctx context.Context, n int64) ([]rank.Entry, error) {
+	entries, _, err := s.Leaderboard(ctx, int(n))
+	return entries, err
+}
+
+// Leaderboard 返回前 limit 名与总人数（limit<=0 返回全部）。
+func (s *Service) Leaderboard(ctx context.Context, limit int) ([]rank.Entry, int64, error) {
+	entries, total, err := s.fullLeaderboard(ctx)
+	if err != nil {
+		return nil, 0, err
+	}
+	if limit > 0 && len(entries) > limit {
+		entries = entries[:limit]
+	}
 	return entries, total, nil
 }
 
 // RankOf 返回用户在全量排行榜中的名次（1 起）与总人数。
 func (s *Service) RankOf(ctx context.Context, userID int64) (int64, int64, error) {
-	rows, err := s.store.Leaderboard(ctx, 0)
+	entries, total, err := s.fullLeaderboard(ctx)
 	if err != nil {
 		return 0, 0, err
 	}
-	for i, r := range rows {
-		if r.UserID == userID {
-			return int64(i + 1), int64(len(rows)), nil
+	for i, e := range entries {
+		if e.UserID == strconv.FormatInt(userID, 10) {
+			return int64(i + 1), total, nil
 		}
 	}
-	return 0, int64(len(rows)), nil
+	return 0, total, nil
 }
 
 // ---------- stats ----------

@@ -14,6 +14,7 @@ type Config struct {
 	QuizCount       int
 	UploadDir       string
 	Title           string
+	PGPoolMax       int
 }
 
 func Load() Config {
@@ -26,6 +27,7 @@ func Load() Config {
 		QuizCount:       getenvInt("QUESTION_COUNT", 10),
 		UploadDir:       getenv("UPLOAD_DIR", "uploads"),
 		Title:           getenv("APP_TITLE", "计算机协会 · 招新答题"),
+		PGPoolMax:       getenvInt("PG_POOL_MAX", 20),
 	}
 }
 

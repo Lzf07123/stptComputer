@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -360,6 +361,12 @@ func (s *Server) handleMe(w http.ResponseWriter, r *http.Request, u *store.User)
 }
 
 func (s *Server) handleRank(w http.ResponseWriter, r *http.Request) {
+	t0 := time.Now()
+	defer func() {
+		if d := time.Since(t0); d > 80*time.Millisecond {
+			log.Printf("rank slow: %v", d)
+		}
+	}()
 	n := 99
 	if v := r.URL.Query().Get("top"); v != "" {
 		if parsed, err := strconv.Atoi(v); err == nil && parsed > 0 && parsed <= 500 {

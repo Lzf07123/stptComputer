@@ -78,8 +78,15 @@ type Announcement struct {
 	CreatedAt time.Time
 }
 
-func Open(ctx context.Context, dsn string) (*Store, error) {
-	pool, err := pgxpool.New(ctx, dsn)
+func Open(ctx context.Context, dsn string, maxConns int) (*Store, error) {
+	pc, err := pgxpool.ParseConfig(dsn)
+	if err != nil {
+		return nil, err
+	}
+	if maxConns > 0 {
+		pc.MaxConns = int32(maxConns)
+	}
+	pool, err := pgxpool.NewWithConfig(ctx, pc)
 	if err != nil {
 		return nil, err
 	}
@@ -438,10 +445,11 @@ type LBRow struct {
 }
 
 // Leaderboard 全量排名：每人取最佳一轮（同分用时短者靠前），
-// 未答过题的排在最后（按注册先后）；limit<=0 返回全部。
-func (s *Store) Leaderboard(ctx context.Context, limit int) ([]LBRow, error) {
+// 未答过题的排在最后（按注册先后）；窗口函数一次返回 total。
+func (s *Store) Leaderboard(ctx context.Context) ([]LBRow, int64, error) {
 	q := `SELECT u.id, u.nickname, u.abandoned,
-	             COALESCE(b.correct, 0), COALESCE(b.cnt, 0), COALESCE(b.elapsed_ms, 0)
+	             COALESCE(b.correct, 0), COALESCE(b.cnt, 0), COALESCE(b.elapsed_ms, 0),
+	             COUNT(*) OVER() AS total
 	      FROM users u
 	      LEFT JOIN (
 	          SELECT DISTINCT ON (user_id)
@@ -454,29 +462,21 @@ func (s *Store) Leaderboard(ctx context.Context, limit int) ([]LBRow, error) {
 	          ORDER BY user_id, correct DESC, elapsed_ms ASC
 	      ) b ON b.user_id = u.id
 	      ORDER BY COALESCE(b.correct, 0) DESC, COALESCE(b.elapsed_ms, 0) ASC, u.id ASC`
-	if limit > 0 {
-		q += ` LIMIT $1`
-	}
-	var err error
-	var rows pgx.Rows
-	if limit > 0 {
-		rows, err = s.pool.Query(ctx, q, limit)
-	} else {
-		rows, err = s.pool.Query(ctx, q)
-	}
+	rows, err := s.pool.Query(ctx, q)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	defer rows.Close()
 	out := []LBRow{}
+	var total int64
 	for rows.Next() {
 		var r LBRow
-		if err := rows.Scan(&r.UserID, &r.Nickname, &r.Abandoned, &r.Correct, &r.Count, &r.ElapsedMS); err != nil {
-			return nil, err
+		if err := rows.Scan(&r.UserID, &r.Nickname, &r.Abandoned, &r.Correct, &r.Count, &r.ElapsedMS, &total); err != nil {
+			return nil, 0, err
 		}
 		out = append(out, r)
 	}
-	return out, rows.Err()
+	return out, total, rows.Err()
 }
 
 func (s *Store) CountAllUsers(ctx context.Context) (int64, error) {

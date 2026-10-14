@@ -99,6 +99,19 @@ docs/       实现方案
 - 前端构建产物建议发布到 OSS+CDN（现场"进门一分钟"静态流量集中）
 - 上线前：`.env` 改强口令 → 后台录入真实题库/二维码/备案号 → 压测（§1.3 指标）→ 现场演练
 
+## 压测（k6）
+
+```bash
+# 隔离环境（独立端口与数据卷，不污染正式数据）
+WEB_PORT=8081 ADMIN_PASSWORD=loadtest docker compose -p stpt-loadtest -f deploy/docker-compose.yml up -d --build
+curl -X POST http://localhost:8081/api/admin/quiz-state -H 'Content-Type: application/json' -H 'X-Admin-Token: loadtest' -d '{"state":"start"}'
+# 运行（400 VU：150 答题全流程 + 200 排行轮询 + 50 WebSocket）
+docker run --rm -i --network stpt-loadtest_default -e BASE_URL=http://web:8080 grafana/k6 run - < loadtest/k6-loadtest.js
+docker compose -p stpt-loadtest -f deploy/docker-compose.yml down -v
+```
+
+> 注：本机 macOS Docker Desktop 桥接网络对并发吞吐有额外开销；生产 Linux 服务器 + 外部反代网络下指标更优。排行榜主通道为 WS 推送（500ms 节流），轮询仅兜底。
+
 ## 开发调试
 
 - 前端热更：`cd frontend && npm run dev`（已配代理到 :8080；仅开发环境使用，不污染部署）

@@ -25,7 +25,7 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	st, err := openStoreWithRetry(ctx, cfg.DatabaseURL)
+	st, err := openStoreWithRetry(ctx, cfg.DatabaseURL, cfg.PGPoolMax)
 	if err != nil {
 		log.Fatalf("store: %v", err)
 	}
@@ -42,6 +42,7 @@ func main() {
 	}
 
 	svc := quiz.New(st, rk, pub, cfg.Title)
+	svc.StartLeaderboardRefresh(ctx)
 	hub := ws.NewHub(svc, pub.Subscribe(ctx)) // 排行榜改走 DB 全量排名
 	go hub.Run(ctx)
 
@@ -66,10 +67,10 @@ func main() {
 }
 
 // openStoreWithRetry 等待 compose 里 postgres 就绪（最多 30s）。
-func openStoreWithRetry(ctx context.Context, dsn string) (*store.Store, error) {
+func openStoreWithRetry(ctx context.Context, dsn string, maxConns int) (*store.Store, error) {
 	var lastErr error
 	for i := 0; i < 30; i++ {
-		st, err := store.Open(ctx, dsn)
+		st, err := store.Open(ctx, dsn, maxConns)
 		if err == nil {
 			return st, nil
 		}

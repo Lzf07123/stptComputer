@@ -1,0 +1,31 @@
+﻿题目,选项A,选项B,选项C,选项D,选项E,选项F,正确答案,难度,分值
+Python 中用于输出内容到控制台的函数是？,print(),echo(),printf(),console.log(),,,A,容易,10
+Python 中用于从用户读取输入的函数是？,input(),read(),scan(),get(),,,A,容易,10
+Python 中，单行注释使用的符号是？,#,//,/* */,--,,,A,容易,10
+关于 Python 变量命名，下列说法正确的是？,可以字母或下划线开头,必须以数字开头,可以包含空格,必须全部大写,,,A,简单,10
+Python 中表示整型数据的关键字是？,int,float,str,bool,,,A,容易,10
+Python 中表示浮点型数据的关键字是？,float,int,char,double,,,A,容易,10
+Python 中表示字符串类型的关键字是？,str,char,string,text,,,A,容易,10
+Python 中布尔类型的取值是？,True 和 False,0 和 1,yes 和 no,真 和 假,,,A,简单,10
+Python 中，列表（list）使用什么符号表示？,方括号 [],圆括号 (),花括号 {},尖括号 <>,,,A,容易,10
+Python 中，元组（tuple）使用什么符号表示？,圆括号 (),方括号 [],花括号 {},尖括号 <>,,,A,简单,10
+Python 中，字典（dict）使用什么符号表示？,花括号 {},方括号 [],圆括号 (),尖括号 <>,,,A,简单,10
+Python 中集合（set）的特点是？,元素唯一且无序,元素可以重复,元素有序,通过下标访问,,,A,简单,10
+Python 中，range(5) 生成的整数序列是？,"0,1,2,3,4","1,2,3,4,5","0,1,2,3,4,5","1,2,3,4",,,A,简单,10
+Python 中的循环语句包括？,for 和 while,if 和 else,def 和 return,try 和 except,,,A,容易,10
+Python 中条件判断使用的关键字是？,if,for,while,def,,,A,容易,10
+Python 中定义函数使用的关键字是？,def,function,func,define,,,A,容易,10
+Python 中 lambda 关键字用于定义？,匿名函数,类,模块,全局变量,,,A,困难,10
+Python 中导入模块使用的关键字是？,import,include,require,using,,,A,容易,10
+"Python 中，表达式 len([1,2,3]) 的结果是？",3,2,4,6,,,A,简单,10
+Python 中，字符串切片 s[0:3] 表示？,取索引 0 到 2 的字符,取索引 0 到 3 的字符,取前 4 个字符,取后 3 个字符,,,A,困难,10
+Python 列表方法 append() 的作用是？,在列表末尾添加一个元素,在列表开头添加一个元素,删除列表元素,对列表排序,,,A,容易,10
+Python 中，删除列表指定索引元素的正确语句是？,del lst[i],lst.add(i),lst.push(i),lst.insert(i),,,A,简单,10
+Python 中，字典通过什么来访问元素？,键,下标索引,位置,序号,,,A,容易,10
+Python 中，判断某个键是否存在于字典中的关键字是？,in,has,contains,exist,,,A,简单,10
+Python 中处理异常使用的关键字是？,try 和 except,if 和 else,for 和 while,def 和 class,,,A,容易,10
+Python 中，None 表示？,空值（无值）,数字零,空字符串,布尔假,,,A,简单,10
+Python 中生成随机数常用的模块是？,random,math,sys,os,,,A,简单,10
+Python 中提供数学运算函数的模块是？,math,string,time,os,,,A,简单,10
+Python 中，列表推导式 [x*2 for x in range(3)] 的结果是？,"[0,2,4]","[1,2,3]","[0,1,2]","[2,4,6]",,,A,困难,10
+Python 中 class 关键字用于？,定义类,定义函数,定义变量,导入模块,,,A,容易,10

@@ -11,7 +11,6 @@ CREATE TABLE IF NOT EXISTS users (
 ALTER TABLE users ADD COLUMN IF NOT EXISTS current_round INT NOT NULL DEFAULT 0;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS current_difficulty TEXT NOT NULL DEFAULT '全部';
 ALTER TABLE users ADD COLUMN IF NOT EXISTS abandoned BOOLEAN NOT NULL DEFAULT FALSE;
-UPDATE users u SET current_round = (SELECT COALESCE(MAX(round_no), 0) FROM attempts a WHERE a.user_id = u.id);
 
 CREATE TABLE IF NOT EXISTS questions (
     id         BIGSERIAL PRIMARY KEY,
@@ -37,6 +36,9 @@ CREATE TABLE IF NOT EXISTS attempts (
     created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 ALTER TABLE attempts ADD COLUMN IF NOT EXISTS round_no INT NOT NULL DEFAULT 1;
+CREATE INDEX IF NOT EXISTS idx_attempts_user_round ON attempts(user_id, round_no);
+-- 迁移：历史库回填 current_round（必须排在 attempts 建表之后）
+UPDATE users u SET current_round = (SELECT COALESCE(MAX(round_no), 0) FROM attempts a WHERE a.user_id = u.id);
 CREATE INDEX IF NOT EXISTS idx_attempts_user ON attempts(user_id);
 
 CREATE TABLE IF NOT EXISTS qrcodes (

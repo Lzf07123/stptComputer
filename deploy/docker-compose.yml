@@ -39,6 +39,7 @@ services:
       QUESTION_SECONDS: ${QUESTION_SECONDS:-20}
       QUESTION_COUNT: ${QUESTION_COUNT:-10}
       UPLOAD_DIR: /app/uploads
+      PG_POOL_MAX: ${PG_POOL_MAX:-20}
     depends_on:
       postgres:
         condition: service_healthy
