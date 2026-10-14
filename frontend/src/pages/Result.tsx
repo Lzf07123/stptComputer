@@ -65,19 +65,7 @@ export default function Result() {
         <p className="rank-line">
           当前排名 <b>{me.rank > 0 ? `第 ${me.rank} 名` : '未上榜'}</b> / 共 {me.total} 人参与
         </p>
-        <button
-          className="btn"
-          onClick={() => {
-            void (async () => {
-              try {
-                await api('/api/quiz/round', { method: 'POST' })
-              } catch {
-                /* 忽略，进入答题页会自动处理 */
-              }
-              nav('/quiz')
-            })()
-          }}
-        >
+        <button className="btn" onClick={() => nav('/quiz')}>
           再来一轮（保留最佳成绩）
         </button>
       </div>

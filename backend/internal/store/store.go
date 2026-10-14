@@ -284,13 +284,21 @@ func (s *Store) UserStats(ctx context.Context, userID int64) (*UserStats, error)
 
 // ---------- rounds & best score ----------
 
-// NextRound 为用户开启新一轮并返回轮次号（持久化在 users.current_round）。
-func (s *Store) NextRound(ctx context.Context, userID int64) (int, error) {
+// NextRound 为用户开启新一轮（难度随轮持久化）并返回轮次号。
+func (s *Store) NextRound(ctx context.Context, userID int64, difficulty string) (int, error) {
 	var n int
 	err := s.pool.QueryRow(ctx,
-		`UPDATE users SET current_round = current_round + 1 WHERE id = $1 RETURNING current_round`,
-		userID).Scan(&n)
+		`UPDATE users SET current_round = current_round + 1, current_difficulty = $2 WHERE id = $1 RETURNING current_round`,
+		userID, difficulty).Scan(&n)
 	return n, err
+}
+
+// CurrentDifficulty 返回用户当前轮所选难度。
+func (s *Store) CurrentDifficulty(ctx context.Context, userID int64) (string, error) {
+	var d string
+	err := s.pool.QueryRow(ctx,
+		`SELECT current_difficulty FROM users WHERE id = $1`, userID).Scan(&d)
+	return d, err
 }
 
 // CurrentRoundNo 返回用户当前轮次号（0 表示尚未开始）。
@@ -416,6 +424,28 @@ func (s *Store) InsertAnnouncement(ctx context.Context, content, typ string) (*A
 		return nil, err
 	}
 	return a, nil
+}
+
+// ---------- overview ----------
+
+func (s *Store) Ping(ctx context.Context) error { return s.pool.Ping(ctx) }
+
+func (s *Store) CountUsers(ctx context.Context) (int64, error) {
+	var n int64
+	err := s.pool.QueryRow(ctx, `SELECT COUNT(*) FROM users WHERE NOT abandoned`).Scan(&n)
+	return n, err
+}
+
+func (s *Store) CountQuestions(ctx context.Context) (int64, error) {
+	var n int64
+	err := s.pool.QueryRow(ctx, `SELECT COUNT(*) FROM questions WHERE active`).Scan(&n)
+	return n, err
+}
+
+func (s *Store) CountBackgrounds(ctx context.Context) (int64, error) {
+	var n int64
+	err := s.pool.QueryRow(ctx, `SELECT COUNT(*) FROM backgrounds WHERE active`).Scan(&n)
+	return n, err
 }
 
 // ---------- stats ----------

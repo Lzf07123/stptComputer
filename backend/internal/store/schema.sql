@@ -3,11 +3,13 @@ CREATE TABLE IF NOT EXISTS users (
     nickname      TEXT NOT NULL,
     token         TEXT NOT NULL UNIQUE,
     device_fp     TEXT NOT NULL DEFAULT '',
-    current_round INT NOT NULL DEFAULT 0,
-    abandoned     BOOLEAN NOT NULL DEFAULT FALSE,
+    current_round      INT NOT NULL DEFAULT 0,
+    current_difficulty TEXT NOT NULL DEFAULT '全部',
+    abandoned          BOOLEAN NOT NULL DEFAULT FALSE,
     created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 ALTER TABLE users ADD COLUMN IF NOT EXISTS current_round INT NOT NULL DEFAULT 0;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS current_difficulty TEXT NOT NULL DEFAULT '全部';
 ALTER TABLE users ADD COLUMN IF NOT EXISTS abandoned BOOLEAN NOT NULL DEFAULT FALSE;
 UPDATE users u SET current_round = (SELECT COALESCE(MAX(round_no), 0) FROM attempts a WHERE a.user_id = u.id);
 

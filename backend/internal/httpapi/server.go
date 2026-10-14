@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -23,13 +24,14 @@ import (
 )
 
 type Server struct {
-	cfg config.Config
-	svc *quiz.Service
-	hub *ws.Hub
+	cfg       config.Config
+	svc       *quiz.Service
+	hub       *ws.Hub
+	startedAt time.Time
 }
 
 func New(cfg config.Config, svc *quiz.Service, hub *ws.Hub) *Server {
-	return &Server{cfg: cfg, svc: svc, hub: hub}
+	return &Server{cfg: cfg, svc: svc, hub: hub, startedAt: time.Now()}
 }
 
 func (s *Server) Handler() http.Handler {
@@ -60,7 +62,7 @@ func (s *Server) Handler() http.Handler {
 
 	// 后台（X-Admin-Token）
 	mux.HandleFunc("POST /api/admin/quiz-state", s.withAdmin(s.handleAdminState))
-	mux.HandleFunc("POST /api/admin/difficulty", s.withAdmin(s.handleAdminDifficulty))
+	mux.HandleFunc("GET /api/admin/overview", s.withAdmin(s.handleAdminOverview))
 	mux.HandleFunc("POST /api/admin/announce", s.withAdmin(s.handleAdminAnnounce))
 	mux.HandleFunc("POST /api/admin/effect", s.withAdmin(s.handleAdminEffect))
 	mux.HandleFunc("POST /api/admin/qrcode", s.withAdmin(s.handleAdminQrcode))
@@ -266,7 +268,14 @@ func (s *Server) quizLimit() int {
 }
 
 func (s *Server) handleStartRound(w http.ResponseWriter, r *http.Request, u *store.User) {
-	roundNo, qs, err := s.svc.StartRound(r.Context(), u.ID, s.quizLimit())
+	var req struct {
+		Difficulty string `json:"difficulty"`
+	}
+	_ = readJSON(r, &req)
+	if req.Difficulty == "" {
+		req.Difficulty = "全部"
+	}
+	roundNo, qs, err := s.svc.StartRound(r.Context(), u.ID, req.Difficulty, s.quizLimit())
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
@@ -387,15 +396,10 @@ func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		footer = &store.Footer{}
 	}
-	difficulty, err := s.svc.Difficulty(r.Context())
-	if err != nil {
-		difficulty = "全部"
-	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"title":            s.svc.Title(),
 		"quiz_state":       state,
 		"question_seconds": s.cfg.QuestionSeconds,
-		"difficulty":       difficulty,
 		"announcement":     announce,
 		"footer":           footer,
 	})
@@ -515,21 +519,24 @@ func (s *Server) handleAdminSetActive(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"id": id, "active": req.Active})
 }
 
-// ---------- admin: difficulty ----------
+// ---------- admin: overview（资源与访问情况） ----------
 
-func (s *Server) handleAdminDifficulty(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		Difficulty string `json:"difficulty"`
-	}
-	if err := readJSON(r, &req); err != nil {
-		writeErr(w, http.StatusBadRequest, "请求体格式错误")
+func (s *Server) handleAdminOverview(w http.ResponseWriter, r *http.Request) {
+	_, online := s.hub.ClientCounts()
+	ov, err := s.svc.Overview(r.Context(), int64(online))
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	if err := s.svc.SetDifficulty(r.Context(), req.Difficulty); err != nil {
-		writeErr(w, http.StatusBadRequest, err.Error())
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]string{"ok": "true", "difficulty": req.Difficulty})
+	var m runtime.MemStats
+	runtime.ReadMemStats(&m)
+	writeJSON(w, http.StatusOK, map[string]any{
+		"overview":    ov,
+		"uptime":      time.Since(s.startedAt).Round(time.Second).String(),
+		"goroutines":  runtime.NumGoroutine(),
+		"mem_mb":      int(m.Alloc / 1024 / 1024),
+		"app_version": "1.0",
+	})
 }
 
 // ---------- admin: backgrounds ----------

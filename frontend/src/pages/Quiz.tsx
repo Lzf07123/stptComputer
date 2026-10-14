@@ -41,6 +41,8 @@ export default function Quiz() {
   const [myNick, setMyNick] = useState(() => sessionStorage.getItem('quiz_nick') || '')
   const [identityConflict, setIdentityConflict] = useState('')
   const [boundNick, setBoundNick] = useState<string | null>(null)
+  const [needsNewRound, setNeedsNewRound] = useState(false)
+  const [difficulty, setDifficulty] = useState('全部')
   const locked = useRef(false)
   const sockRef = useRef<QuizSocket | null>(null)
 
@@ -145,12 +147,28 @@ export default function Quiz() {
           return
         }
       } catch {
-        /* 无进行中轮次 → 下面开新轮 */
+        /* 无进行中轮次 → 选难度开新轮 */
       }
-      const d = await api<RoundResp>('/api/quiz/round', { method: 'POST' })
-      enterRound(d, `新一轮答题开始（第 ${d.round_no} 轮），历史最佳成绩仍保留`)
+      setNeedsNewRound(true)
+      setPhase('name')
     } catch (e) {
       clearToken()
+      setError((e as Error).message)
+      setPhase('name')
+    }
+  }
+
+  // 按所选难度开始新一轮
+  async function startNewRound() {
+    setError('')
+    setPhase('loading')
+    try {
+      const d = await api<RoundResp>('/api/quiz/round', {
+        method: 'POST',
+        body: JSON.stringify({ difficulty }),
+      })
+      enterRound(d, '')
+    } catch (e) {
       setError((e as Error).message)
       setPhase('name')
     }
@@ -175,7 +193,10 @@ export default function Quiz() {
       if (s.recovered) {
         setFlash('检测到本设备已有答题身份，已自动恢复')
       }
-      const d = await api<RoundResp>('/api/quiz/round', { method: 'POST' })
+      const d = await api<RoundResp>('/api/quiz/round', {
+        method: 'POST',
+        body: JSON.stringify({ difficulty }),
+      })
       enterRound(d, '')
     } catch (e) {
       const err = e as Error & { code?: string }
@@ -338,6 +359,37 @@ export default function Quiz() {
     )
   }
 
+  const diffPicker = (
+    <div className="diff-picker">
+      {['全部', '容易', '简单', '困难'].map((d) => (
+        <button
+          key={d}
+          type="button"
+          className={`diff-opt${difficulty === d ? ' on' : ''}`}
+          onClick={() => setDifficulty(d)}
+        >
+          {d}
+        </button>
+      ))}
+    </div>
+  )
+
+  // ---- 新一轮（已有身份）：先选难度 ----
+  if (needsNewRound) {
+    return (
+      <section className="card center">
+        <h2>新一轮答题</h2>
+        <p className="muted">答题前请选择本局难度（历史最佳成绩仍保留）</p>
+        {diffPicker}
+        <button className="btn btn-primary" style={{ marginTop: 16 }} onClick={() => void startNewRound()}>
+          开始本局答题
+        </button>
+        {error && <p className="error">{error}</p>}
+      </section>
+    )
+  }
+
+  // ---- 注册 / 恢复身份 ----
   return (
     <section className="card center">
       <h2>开始答题</h2>
@@ -357,6 +409,7 @@ export default function Quiz() {
       ) : (
         <>
           <p className="muted">输入昵称领取你的答题身份（每人限领一次）</p>
+          {diffPicker}
           <form
             className="name-form"
             onSubmit={(e) => {

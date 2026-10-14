@@ -17,8 +17,26 @@ interface Question {
   difficulty: string
 }
 
+interface OvResp {
+  overview: {
+    users: number
+    attempts: number
+    participants: number
+    online: number
+    questions: number
+    backgrounds: number
+    db: string
+    redis: string
+  }
+  mem_mb: number
+  goroutines: number
+  uptime: string
+}
+
 export default function Admin() {
   const [pass, setPass] = useState(() => sessionStorage.getItem('admin_pass') || '')
+  const [verified, setVerified] = useState(false)
+  const [ov, setOv] = useState<OvResp | null>(null)
   const [msg, setMsg] = useState('')
   const [questions, setQuestions] = useState<Question[]>([])
   const [content, setContent] = useState('')
@@ -26,7 +44,6 @@ export default function Admin() {
   const [answerIdx, setAnswerIdx] = useState(0)
   const [score, setScore] = useState(10)
   const [difficulty, setDifficulty] = useState('简单')
-  const [sessionDiff, setSessionDiff] = useState('全部')
   const [bgs, setBgs] = useState<Bg[]>([])
   const [uploading, setUploading] = useState(false)
   const [footer, setFooter] = useState({ owner: '', license: '', icp: '', icp_icon: '', police: '', police_icon: '' })
@@ -36,6 +53,42 @@ export default function Admin() {
     () => ({ 'X-Admin-Token': pass }),
     [pass],
   )
+
+  const verify = useCallback(async (p: string) => {
+    try {
+      const d = await api<OvResp>('/api/admin/overview', { headers: { 'X-Admin-Token': p } })
+      setOv(d)
+      setVerified(true)
+      setMsg('')
+      return true
+    } catch (e) {
+      setVerified(false)
+      setOv(null)
+      setMsg(`✘ ${(e as Error).message}`)
+      return false
+    }
+  }, [])
+
+  useEffect(() => {
+    const p = sessionStorage.getItem('admin_pass')
+    if (p) void verify(p)
+  }, [verify])
+
+  const submitPass = () => {
+    sessionStorage.setItem('admin_pass', pass)
+    void verify(pass)
+  }
+
+  // 概览 10s 自动刷新
+  useEffect(() => {
+    if (!verified || !pass) return
+    const t = window.setInterval(() => {
+      void api<OvResp>('/api/admin/overview', { headers: adminHeaders() })
+        .then(setOv)
+        .catch(() => undefined)
+    }, 10000)
+    return () => clearInterval(t)
+  }, [verified, pass, adminHeaders])
 
   const reload = useCallback(async () => {
     try {
@@ -74,13 +127,13 @@ export default function Admin() {
   }, [adminHeaders])
 
   useEffect(() => {
-    if (pass) {
+    if (pass && verified) {
       void reload()
       void reloadBgs()
       void reloadFooter()
       void reloadQr()
     }
-  }, [pass, reload, reloadBgs, reloadFooter, reloadQr])
+  }, [pass, verified, reload, reloadBgs, reloadFooter, reloadQr])
 
   // 上传到 /uploads 并返回 URL（群二维码、备案图标等）
   const uploadImage = async (f: File): Promise<string> => {
@@ -170,22 +223,72 @@ export default function Admin() {
     }
   }
 
+  if (!verified) {
+    return (
+      <section className="admin">
+        <div className="card center">
+          <h2>后台管理</h2>
+          <p className="muted">请输入后台口令进行验证</p>
+          <form
+            className="name-form"
+            onSubmit={(e) => {
+              e.preventDefault()
+              submitPass()
+            }}
+          >
+            <input
+              type="password"
+              value={pass}
+              onChange={(e) => setPass(e.target.value)}
+              placeholder="后台口令"
+              autoFocus
+            />
+            <button className="btn btn-primary" type="submit">
+              验证
+            </button>
+          </form>
+          {msg && <p className="error">{msg}</p>}
+        </div>
+      </section>
+    )
+  }
+
   return (
     <section className="admin">
       <div className="card">
         <h2>后台管理</h2>
-        <label className="field">
-          后台口令
-          <input
-            type="password"
-            value={pass}
-            onChange={(e) => {
-              setPass(e.target.value)
-              sessionStorage.setItem('admin_pass', e.target.value)
+        <p className="muted">
+          已验证通过
+          <button
+            className="mini-btn"
+            style={{ marginLeft: 8 }}
+            onClick={() => {
+              sessionStorage.removeItem('admin_pass')
+              setVerified(false)
+              setOv(null)
+              setPass('')
             }}
-          />
-        </label>
+          >
+            退出验证
+          </button>
+        </p>
         {msg && <p className={`flash${msg.startsWith('✔') ? '' : ' error'}`}>{msg}</p>}
+
+        {ov && (
+          <div className="ov-grid">
+            <div className="ov-item"><b>{ov.overview.users}</b><span>注册用户</span></div>
+            <div className="ov-item"><b>{ov.overview.participants}</b><span>参与答题</span></div>
+            <div className="ov-item"><b>{ov.overview.attempts}</b><span>累计答题</span></div>
+            <div className="ov-item"><b>{ov.overview.online}</b><span>当前在线</span></div>
+            <div className="ov-item"><b>{ov.overview.questions}</b><span>启用题目</span></div>
+            <div className="ov-item"><b>{ov.overview.backgrounds}</b><span>背景图片</span></div>
+            <div className="ov-item"><b>{ov.mem_mb} MB</b><span>内存占用</span></div>
+            <div className="ov-item"><b>{ov.goroutines}</b><span>协程数</span></div>
+            <div className="ov-item"><b>{ov.uptime}</b><span>运行时长</span></div>
+            <div className={`ov-item ${ov.overview.db === 'ok' ? 'ok' : 'bad'}`}><b>{ov.overview.db}</b><span>数据库</span></div>
+            <div className={`ov-item ${ov.overview.redis === 'ok' ? 'ok' : 'bad'}`}><b>{ov.overview.redis}</b><span>Redis</span></div>
+          </div>
+        )}
 
         <div className="admin-grid">
           <div className="admin-panel">
@@ -196,24 +299,6 @@ export default function Admin() {
             <button className="btn" onClick={() => void act('/api/admin/quiz-state', { state: 'stop' }, '答题已结束')}>
               结束答题
             </button>
-            <label className="field" style={{ marginTop: 12 }}>
-              出题难度（全部/容易/简单/困难）
-              <select
-                value={sessionDiff}
-                onChange={(e) => setSessionDiff(e.target.value)}
-              >
-                {['全部', '容易', '简单', '困难'].map((d) => (
-                  <option key={d} value={d}>{d}</option>
-                ))}
-              </select>
-              <button
-                className="btn btn-secondary"
-                style={{ marginTop: 8 }}
-                onClick={() => void act('/api/admin/difficulty', { difficulty: sessionDiff }, `出题难度已设为「${sessionDiff}」`)}
-              >
-                应用难度
-              </button>
-            </label>
           </div>
 
           <div className="admin-panel">

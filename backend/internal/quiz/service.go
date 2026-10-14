@@ -160,13 +160,9 @@ func orderedOptions(q store.Question, userID int64, roundNo int) []string {
 	return opts
 }
 
-// drawQuestions 按当前难度筛选 + (用户, 轮次) 确定性随机抽 limit 题。
+// drawQuestions 按所选难度筛选 + (用户, 轮次) 确定性随机抽 limit 题。
 // 同轮刷新结果一致（保证断线恢复），不同轮次/不同用户题目不同。
-func (s *Service) drawQuestions(ctx context.Context, userID int64, roundNo int, limit int) ([]store.Question, error) {
-	difficulty, err := s.store.QuizDifficulty(ctx)
-	if err != nil {
-		difficulty = "全部"
-	}
+func (s *Service) drawQuestions(ctx context.Context, userID int64, roundNo int, difficulty string, limit int) ([]store.Question, error) {
 	qs, err := s.store.ListActiveQuestions(ctx, difficulty)
 	if err != nil {
 		return nil, err
@@ -182,13 +178,16 @@ func (s *Service) drawQuestions(ctx context.Context, userID int64, roundNo int, 
 	return qs, nil
 }
 
-// StartRound 开始新一轮（轮次 = 历史最大轮次 + 1）。
-func (s *Service) StartRound(ctx context.Context, userID int64, limit int) (int, []store.Question, error) {
-	roundNo, err := s.store.NextRound(ctx, userID)
+// StartRound 开始新一轮：难度由用户答题前选择并随轮持久化。
+func (s *Service) StartRound(ctx context.Context, userID int64, difficulty string, limit int) (int, []store.Question, error) {
+	if !validDifficulty(difficulty) {
+		return 0, nil, ErrBadRequest
+	}
+	roundNo, err := s.store.NextRound(ctx, userID, difficulty)
 	if err != nil {
 		return 0, nil, err
 	}
-	qs, err := s.drawQuestions(ctx, userID, roundNo, limit)
+	qs, err := s.drawQuestions(ctx, userID, roundNo, difficulty, limit)
 	if err != nil {
 		return 0, nil, err
 	}
@@ -204,7 +203,11 @@ func (s *Service) CurrentRound(ctx context.Context, userID int64, limit int) (in
 	if roundNo == 0 {
 		return 0, nil, 0, ErrNoRound
 	}
-	qs, err := s.drawQuestions(ctx, userID, roundNo, limit)
+	difficulty, err := s.store.CurrentDifficulty(ctx, userID)
+	if err != nil {
+		return 0, nil, 0, err
+	}
+	qs, err := s.drawQuestions(ctx, userID, roundNo, difficulty, limit)
 	if err != nil {
 		return 0, nil, 0, err
 	}
@@ -479,6 +482,54 @@ func (s *Service) publish(ctx context.Context, typ string, data any) error {
 		return err
 	}
 	return s.pub.Publish(ctx, string(msg))
+}
+
+// ---------- overview ----------
+
+type Overview struct {
+	Users        int64  `json:"users"`
+	Attempts     int64  `json:"attempts"`
+	Participants int64  `json:"participants"`
+	Online       int64  `json:"online"`
+	Questions    int64  `json:"questions"`
+	Backgrounds  int64  `json:"backgrounds"`
+	DB           string `json:"db"`
+	Redis        string `json:"redis"`
+}
+
+func (s *Service) Overview(ctx context.Context, online int64) (*Overview, error) {
+	users, err := s.store.CountUsers(ctx)
+	if err != nil {
+		return nil, err
+	}
+	attempts, err := s.store.CountAttempts(ctx)
+	if err != nil {
+		return nil, err
+	}
+	participants, err := s.store.CountAnsweredUsers(ctx)
+	if err != nil {
+		return nil, err
+	}
+	questions, err := s.store.CountQuestions(ctx)
+	if err != nil {
+		return nil, err
+	}
+	bgs, err := s.store.CountBackgrounds(ctx)
+	if err != nil {
+		return nil, err
+	}
+	db, redisStatus := "ok", "ok"
+	if err := s.store.Ping(ctx); err != nil {
+		db = "error"
+	}
+	if err := s.rank.Ping(ctx); err != nil {
+		redisStatus = "error"
+	}
+	return &Overview{
+		Users: users, Attempts: attempts, Participants: participants,
+		Online: online, Questions: questions, Backgrounds: bgs,
+		DB: db, Redis: redisStatus,
+	}, nil
 }
 
 // ---------- difficulty ----------
