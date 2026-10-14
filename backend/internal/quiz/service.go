@@ -719,6 +719,11 @@ func (s *Service) SetDifficulty(ctx context.Context, d string) error {
 	return s.store.SetQuizDifficulty(ctx, d)
 }
 
+// ClearQuestions 一键清空题库（连同答题记录）。
+func (s *Service) ClearQuestions(ctx context.Context) (int64, int64, error) {
+	return s.store.ClearQuestions(ctx)
+}
+
 // ---------- admin: questions ----------
 
 func (s *Service) AllQuestions(ctx context.Context) ([]store.Question, error) {

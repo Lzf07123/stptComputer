@@ -14,7 +14,11 @@ type seedQ struct {
 }
 
 // seedQuestions 题库为空时整体播种；已存在同名题目时跳过（幂等，可增量扩充）。
+// 用户一键清空过题库（skip_seed=1）则不再播种。
 func (s *Store) seedQuestions(ctx context.Context) error {
+	if s.SeedSkipped(ctx) {
+		return nil
+	}
 	seeds := []seedQ{
 		// ---- 基础 10 题 ----
 		{"计算机中「CPU」的中文全称是？", []string{"中央处理器", "图形处理器", "内存控制器", "总线控制器"}, 0, 10, "容易"},

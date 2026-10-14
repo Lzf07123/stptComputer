@@ -521,6 +521,10 @@ select {
   border-radius: 6px; padding: 4px 10px; cursor: pointer; font-size: 12px; font-weight: 700;
 }
 .mini-btn:hover { border-color: var(--green); }
+.mini-btn.danger { color: var(--red); border-color: var(--red); }
+.mini-btn.danger:hover { background: rgba(220, 38, 38, 0.12); }
+.qbank-head { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; }
+.qbank-head h3 { margin: 0; }
 
 /* ---------- 首页背景：多行照片带，横向无缝滚动（原比例） ---------- */
 .bg-marquee {

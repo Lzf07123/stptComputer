@@ -547,6 +547,43 @@ func (s *Store) CountBackgrounds(ctx context.Context) (int64, error) {
 	return n, err
 }
 
+// ---------- clear questions ----------
+
+// ClearQuestions 一键清空：删除全部答题记录与题目，并标记 skip_seed
+// 防止应用重启后种子题被重新播种（用户意图保留）。
+func (s *Store) ClearQuestions(ctx context.Context) (attempts, questions int64, err error) {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return 0, 0, err
+	}
+	defer tx.Rollback(ctx)
+	at, err := tx.Exec(ctx, `DELETE FROM attempts`)
+	if err != nil {
+		return 0, 0, err
+	}
+	qt, err := tx.Exec(ctx, `DELETE FROM questions`)
+	if err != nil {
+		return 0, 0, err
+	}
+	if _, err := tx.Exec(ctx,
+		`INSERT INTO app_meta (k, v) VALUES ('skip_seed', '1') ON CONFLICT (k) DO UPDATE SET v = '1'`); err != nil {
+		return 0, 0, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return 0, 0, err
+	}
+	return at.RowsAffected(), qt.RowsAffected(), nil
+}
+
+// SeedSkipped 用户是否执行过一键清空（跳过种子播种）。
+func (s *Store) SeedSkipped(ctx context.Context) bool {
+	var v string
+	if err := s.pool.QueryRow(ctx, `SELECT v FROM app_meta WHERE k = 'skip_seed'`).Scan(&v); err != nil {
+		return false
+	}
+	return v == "1"
+}
+
 // ---------- stats ----------
 
 func (s *Store) CountAttempts(ctx context.Context) (int64, error) {

@@ -38,6 +38,7 @@ export default function Admin() {
   const [verified, setVerified] = useState(false)
   const [ov, setOv] = useState<OvResp | null>(null)
   const [tab, setTab] = useState<'overview' | 'control' | 'questions' | 'appearance'>('control')
+  const [clearStep, setClearStep] = useState<null | 'ask' | 'final'>(null)
   const [msg, setMsg] = useState('')
   const [questions, setQuestions] = useState<Question[]>([])
   const [content, setContent] = useState('')
@@ -263,6 +264,20 @@ export default function Admin() {
       } else {
         setMsg(`✔ 导入成功：${d.imported} 题`)
       }
+      void reload()
+    } catch (e) {
+      setMsg(`✘ ${(e as Error).message}`)
+    }
+  }
+
+  const clearAllQuestions = async () => {
+    setClearStep(null)
+    try {
+      const d = await api<{ attempts_deleted: number; questions_deleted: number }>('/api/admin/questions', {
+        method: 'DELETE',
+        headers: adminHeaders(),
+      })
+      setMsg(`✔ 已清空：${d.questions_deleted} 道题目、${d.attempts_deleted} 条答题记录`)
       void reload()
     } catch (e) {
       setMsg(`✘ ${(e as Error).message}`)
@@ -545,7 +560,12 @@ export default function Admin() {
 
       {tab === 'questions' && (
       <div className="card">
-        <h3>题库（{questions.length}）</h3>
+        <div className="qbank-head">
+          <h3>题库（{questions.length}）</h3>
+          <button className="mini-btn danger" onClick={() => setClearStep('ask')}>
+            一键清空题库
+          </button>
+        </div>
         <div className="admin-grid">
           <div className="admin-panel">
             <h3>批量导入题目</h3>
@@ -635,6 +655,37 @@ export default function Admin() {
           </div>
         </div>
       </div>
+      )}
+
+      {clearStep && (
+        <div className="modal-veil" onClick={() => setClearStep(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            {clearStep === 'ask' ? (
+              <>
+                <h3>清空全部题库？</h3>
+                <ul className="side-effects">
+                  <li>将删除全部 <b>{questions.length} 道题目</b></li>
+                  <li>同时删除所有<b>答题记录</b>，排行榜与个人成绩将归零</li>
+                  <li>清空后<b>不会重新播种</b>内置示例题，请随后导入正式题库</li>
+                  <li>此操作<b>不可恢复</b></li>
+                </ul>
+                <div className="modal-actions">
+                  <button className="btn" onClick={() => setClearStep(null)}>取消</button>
+                  <button className="btn btn-primary" onClick={() => setClearStep('final')}>继续</button>
+                </div>
+              </>
+            ) : (
+              <>
+                <h3>最后确认</h3>
+                <p className="muted">再次确认：清空题库将同时删除全部答题记录，且不可恢复。确定清空吗？</p>
+                <div className="modal-actions">
+                  <button className="btn" onClick={() => setClearStep('ask')}>返回</button>
+                  <button className="btn btn-primary" onClick={() => void clearAllQuestions()}>确认清空</button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
       )}
     </section>
   )

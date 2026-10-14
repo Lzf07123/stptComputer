@@ -74,6 +74,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/admin/qrcode", s.withAdmin(s.handleAdminQrcode))
 	mux.HandleFunc("GET /api/admin/questions", s.withAdmin(s.handleAdminListQuestions))
 	mux.HandleFunc("POST /api/admin/questions", s.withAdmin(s.handleAdminCreateQuestion))
+	mux.HandleFunc("DELETE /api/admin/questions", s.withAdmin(s.handleAdminClearQuestions))
 	mux.HandleFunc("POST /api/admin/questions/{id}/active", s.withAdmin(s.handleAdminSetActive))
 	mux.HandleFunc("POST /api/admin/backgrounds", s.withAdmin(s.handleAdminUploadBackground))
 	mux.HandleFunc("GET /api/admin/backgrounds", s.withAdmin(s.handleAdminListBackgrounds))
@@ -681,6 +682,21 @@ func (s *Server) handleAdminOverview(w http.ResponseWriter, r *http.Request) {
 		"goroutines":  runtime.NumGoroutine(),
 		"mem_mb":      int(m.Alloc / 1024 / 1024),
 		"app_version": "1.0",
+	})
+}
+
+// ---------- admin: clear questions ----------
+
+func (s *Server) handleAdminClearQuestions(w http.ResponseWriter, r *http.Request) {
+	attempts, questions, err := s.svc.ClearQuestions(r.Context())
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"ok":                "true",
+		"attempts_deleted":  attempts,
+		"questions_deleted": questions,
 	})
 }
 
