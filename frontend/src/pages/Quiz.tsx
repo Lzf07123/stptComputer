@@ -42,6 +42,7 @@ export default function Quiz() {
   const [identityConflict, setIdentityConflict] = useState('')
   const [boundNick, setBoundNick] = useState<string | null>(null)
   const [needsNewRound, setNeedsNewRound] = useState(false)
+  const [exitedInfo, setExitedInfo] = useState<{ round_no: number; answered: number; total: number } | null>(null)
   const [difficulty, setDifficulty] = useState('全部')
   const [confirmReq, setConfirmReq] = useState<{ kind: 'identity' | 'round'; byDevice: boolean; step: 'ask' | 'final' } | null>(null)
   const locked = useRef(false)
@@ -135,7 +136,7 @@ export default function Quiz() {
   useEffect(() => {
     if (phase !== 'name' || !getToken()) return
     if (sessionStorage.getItem('quiz_exited') === '1') {
-      setNeedsNewRound(true)
+      void checkExitedRound()
       return
     }
     void resume()
@@ -197,6 +198,49 @@ export default function Quiz() {
       }
       // 非身份问题（网络/服务器瞬时错误）：保留 token，提示可重试
       setError(`${err.message}（可刷新重试）`)
+      setPhase('name')
+    }
+  }
+
+  // 退出答题后：查询进行中的本轮，展示「已退出答题」选择界面
+  const checkExitedRound = async () => {
+    try {
+      const cur = await api<RoundResp & { answered: number }>('/api/quiz/current')
+      setExitedInfo({
+        round_no: cur.round_no,
+        answered: Math.min(cur.answered, cur.questions.length),
+        total: cur.questions.length,
+      })
+      setPhase('name')
+    } catch {
+      setExitedInfo(null)
+      setNeedsNewRound(true)
+      setPhase('name')
+    }
+  }
+
+  // 继续本轮：恢复进度进入答题
+  const continueRound = async () => {
+    sessionStorage.removeItem('quiz_exited')
+    setPhase('loading')
+    try {
+      const cur = await api<RoundResp & { answered: number }>('/api/quiz/current')
+      const answered = Math.min(cur.answered, cur.questions.length)
+      setRoundNo(cur.round_no)
+      setQuestions(cur.questions)
+      setQSeconds(cur.question_seconds)
+      setSeconds(cur.question_seconds)
+      if (answered >= cur.questions.length) {
+        setNeedsNewRound(true)
+        setPhase('name')
+        return
+      }
+      connectSocket()
+      setIdx(answered)
+      setExitedInfo(null)
+      setPhase('quiz')
+    } catch {
+      setNeedsNewRound(true)
       setPhase('name')
     }
   }
@@ -269,6 +313,8 @@ export default function Quiz() {
     // 放弃本轮：作废本轮成绩，身份与历史最佳保留
     try {
       await api('/api/quiz/round/abandon', { method: 'POST' })
+      sessionStorage.removeItem('quiz_exited')
+      setExitedInfo(null)
       sockRef.current?.close()
       setQuestions([])
       setIdx(0)
@@ -452,6 +498,31 @@ export default function Quiz() {
     body = (
       <section className="card center">
         <p className="muted">加载中…</p>
+      </section>
+    )
+  } else if (exitedInfo) {
+    body = (
+      <section className="card center">
+        <h2>已退出答题</h2>
+        <p className="muted">
+          第 {exitedInfo.round_no} 轮进度已保留：已答 {exitedInfo.answered} / {exitedInfo.total} 题
+        </p>
+        <div className="bound-actions">
+          <button className="btn btn-primary" onClick={() => void continueRound()}>
+            继续本轮
+          </button>
+          <button className="btn" onClick={requestAbandonRound}>
+            放弃本轮
+          </button>
+        </div>
+        <p className="newround-id" style={{ marginTop: 14 }}>
+          <span className="id-tag">当前身份：{myNick}</span>
+          <button className="mini-quit" onClick={() => requestAbandon(false)}>
+            放弃当前身份
+          </button>
+        </p>
+        {flash && <p className="flash">{flash}</p>}
+        {error && <p className="error">{error}</p>}
       </section>
     )
   } else if (needsNewRound) {
