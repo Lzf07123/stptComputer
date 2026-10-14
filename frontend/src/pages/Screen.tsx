@@ -36,6 +36,10 @@ export default function Screen() {
       void api<Stats>('/api/stats')
         .then(setStats)
         .catch(() => undefined)
+      // 答题状态 5s 同步（配合 WS 事件，徽章及时准确）
+      void api<{ quiz_state: string }>('/api/config')
+        .then((c) => setState(c.quiz_state === 'start' ? 'start' : 'stop'))
+        .catch(() => undefined)
       // 本机若有答题身份，头部展示自己的全量排名
       if (getToken()) {
         void api<MyRank>('/api/me')

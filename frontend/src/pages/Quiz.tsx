@@ -43,6 +43,7 @@ export default function Quiz() {
   const [boundNick, setBoundNick] = useState<string | null>(null)
   const [needsNewRound, setNeedsNewRound] = useState(false)
   const [exitedInfo, setExitedInfo] = useState<{ round_no: number; answered: number; total: number } | null>(null)
+  const [quizState, setQuizState] = useState<'start' | 'stop'>('stop')
   const [difficulty, setDifficulty] = useState('全部')
   const [confirmReq, setConfirmReq] = useState<{ kind: 'identity' | 'round'; byDevice: boolean; step: 'ask' | 'final' } | null>(null)
   const locked = useRef(false)
@@ -55,11 +56,25 @@ export default function Quiz() {
     const t = getToken()
     if (!t) return
     sockRef.current?.close()
-    sockRef.current = new QuizSocket(`${wsURL()}?token=${encodeURIComponent(t)}`, () => undefined)
+    sockRef.current = new QuizSocket(`${wsURL()}?token=${encodeURIComponent(t)}`, (msg) => {
+      if (msg.type === 'quiz_state') setQuizState((msg.data && msg.data.state) || 'stop')
+    })
     sockRef.current.connect()
   }
 
   useEffect(() => () => sockRef.current?.close(), [])
+
+  // 答题状态：初始读取 + 5s 轮询（与 WS 事件双保险）
+  useEffect(() => {
+    const sync = () => {
+      void api<{ quiz_state: string }>('/api/config')
+        .then((c) => setQuizState(c.quiz_state === 'start' ? 'start' : 'stop'))
+        .catch(() => undefined)
+    }
+    void sync()
+    const t = window.setInterval(sync, 5000)
+    return () => clearInterval(t)
+  }, [])
 
   // 本机是否已有绑定身份（未登录时查询，用于直接展示恢复选项）
   const checkBound = async () => {
@@ -157,6 +172,11 @@ export default function Quiz() {
   }
 
   async function resume() {
+    if (quizState !== 'start') {
+      setFlash('答题尚未开始，开启后可自动继续')
+      setPhase('name')
+      return
+    }
     setPhase('loading')
     try {
       connectSocket()
@@ -221,6 +241,10 @@ export default function Quiz() {
 
   // 继续本轮：恢复进度进入答题
   const continueRound = async () => {
+    if (quizState !== 'start') {
+      setError('答题尚未开始，请等待现场管理员开启后再进入')
+      return
+    }
     sessionStorage.removeItem('quiz_exited')
     setPhase('loading')
     try {
@@ -247,6 +271,10 @@ export default function Quiz() {
 
   // 按所选难度开始新一轮
   async function startNewRound() {
+    if (quizState !== 'start') {
+      setError('答题尚未开始，请等待现场管理员开启后再进入')
+      return
+    }
     sessionStorage.removeItem('quiz_exited')
     setError('')
     setPhase('loading')
@@ -263,6 +291,10 @@ export default function Quiz() {
   }
 
   async function start(nickOverride?: string) {
+    if (quizState !== 'start') {
+      setError('答题尚未开始，请等待现场管理员开启后再进入')
+      return
+    }
     const nick = nickOverride ?? nickname
     sessionStorage.removeItem('quiz_exited')
     setError('')
@@ -386,6 +418,10 @@ export default function Quiz() {
 
   function choose(i: number) {
     if (locked.current || phase !== 'quiz' || feedback) return
+    if (quizState !== 'start') {
+      setFlash('答题未开始或已结束，无法提交')
+      return
+    }
     locked.current = true
     void answer(i, crypto.randomUUID())
   }
@@ -486,6 +522,9 @@ export default function Quiz() {
             )
           })}
         </div>
+        {quizState !== 'start' && (
+          <div className="announce-banner"><span>答题已暂停，答案提交将被拒绝</span></div>
+        )}
         {feedback && (
           <p className={`feedback${feedback.correct ? ' ok' : ' bad'}`}>
             {feedback.correct ? `✔ 回答正确 +${feedback.score} 分` : '✘ 回答错误'}
@@ -521,6 +560,9 @@ export default function Quiz() {
             放弃当前身份
           </button>
         </p>
+        {quizState !== 'start' && (
+          <p className="flash">⏳ 答题尚未开始，请等待现场管理员开启（开启后自动生效）</p>
+        )}
         {flash && <p className="flash">{flash}</p>}
         {error && <p className="error">{error}</p>}
       </section>
@@ -540,6 +582,9 @@ export default function Quiz() {
             放弃当前身份
           </button>
         </p>
+        {quizState !== 'start' && (
+          <p className="flash">⏳ 答题尚未开始，请等待现场管理员开启（开启后自动生效）</p>
+        )}
         {flash && <p className="flash">{flash}</p>}
         {error && <p className="error">{error}</p>}
       </section>
@@ -584,6 +629,9 @@ export default function Quiz() {
               </button>
             </form>
           </>
+        )}
+        {quizState !== 'start' && (
+          <p className="flash">⏳ 答题尚未开始，请等待现场管理员开启（开启后自动生效）</p>
         )}
         {identityConflict && (
           <div className="conflict-box">

@@ -39,6 +39,7 @@ export default function Admin() {
   const [ov, setOv] = useState<OvResp | null>(null)
   const [tab, setTab] = useState<'overview' | 'control' | 'questions' | 'appearance'>('control')
   const [wipe, setWipe] = useState<{ target: 'questions' | 'bgs'; step: 'ask' | 'final' } | null>(null)
+  const [qState, setQState] = useState<'start' | 'stop'>('stop')
   const [msg, setMsg] = useState('')
   const [questions, setQuestions] = useState<Question[]>([])
   const [content, setContent] = useState('')
@@ -86,6 +87,24 @@ export default function Admin() {
     setVerified(false)
     setOv(null)
     setPass('')
+  }
+
+  // 答题状态 5s 轮询（控制面板提示准确）
+  useEffect(() => {
+    if (!verified) return
+    const sync = () => {
+      void api<{ quiz_state: string }>('/api/config')
+        .then((c) => setQState(c.quiz_state === 'start' ? 'start' : 'stop'))
+        .catch(() => undefined)
+    }
+    void sync()
+    const t = window.setInterval(sync, 5000)
+    return () => clearInterval(t)
+  }, [verified])
+
+  const switchState = async (next: 'start' | 'stop') => {
+    setQState(next)
+    await act('/api/admin/quiz-state', { state: next }, next === 'start' ? '答题已开始，参与者可进入答题' : '答题已结束，正在答题者将无法提交')
   }
 
   // 概览 10s 自动刷新
@@ -386,10 +405,24 @@ export default function Admin() {
           <div className="admin-grid">
           <div className="admin-panel">
             <h3>答题控制</h3>
-            <button className="btn btn-accent" onClick={() => void act('/api/admin/quiz-state', { state: 'start' }, '答题已开始')}>
+            <p className="muted">
+              当前状态：
+              <b className={qState === 'start' ? 'state-live' : 'state-idle'}>
+                {qState === 'start' ? '答题进行中' : '答题未开始'}
+              </b>
+            </p>
+            <button
+              className="btn btn-accent"
+              disabled={qState === 'start'}
+              onClick={() => void switchState('start')}
+            >
               开始答题
             </button>
-            <button className="btn" onClick={() => void act('/api/admin/quiz-state', { state: 'stop' }, '答题已结束')}>
+            <button
+              className="btn"
+              disabled={qState === 'stop'}
+              onClick={() => void switchState('stop')}
+            >
               结束答题
             </button>
           </div>
