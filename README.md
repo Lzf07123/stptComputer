@@ -44,20 +44,14 @@ docker compose -f deploy/docker-compose.yml up -d --build
 
 | 变量 | 默认 | 作用 |
 |---|---|---|
-| `GOLANG_IMAGE` | golang:1.22-alpine | 后端构建镜像 |
-| `ALPINE_IMAGE` | alpine:3.20 | 后端运行镜像 |
-| `NODE_IMAGE` | node:20-alpine | 前端构建镜像 |
-| `NGINX_IMAGE` | nginx:1.27-alpine | Web/反代镜像 |
-| `POSTGRES_IMAGE` | postgres:15-alpine | 数据库镜像 |
-| `REDIS_IMAGE` | redis:7-alpine | 缓存镜像 |
+| `IMAGE_REGISTRY` | （空） | 基础镜像 registry 前缀，统一作用于 golang/alpine/node/nginx/postgres/redis 六个镜像（需以 `/` 结尾） |
 | `SOURCE_MIRROR` | （空） | 软件源统一开关：空=官方源；`cn`=国内镜像组合（Go 走 goproxy.cn、npm 走 npmmirror、apk 走阿里云） |
 
-- 镜像变量为完整引用，**可带 registry 前缀**（如 `mirror.example.com/golang:1.22-alpine`），适配内网仓库。
 - 国内加速（写入 `.env` 后重新 `up -d --build`）：
 
 ```bash
 SOURCE_MIRROR=cn
-#GOLANG_IMAGE=docker.1ms.run/library/golang:1.22-alpine  # 如需镜像仓库前缀
+#IMAGE_REGISTRY=docker.1ms.run/   # 如需镜像仓库前缀（示例，按实际可用镜像源填写）
 ```
 
 页脚/备案/二维码/背景图等运行期内容一律在后台配置，持久化于 postgres 与 uploads 两个 Docker 数据卷，不走环境变量。

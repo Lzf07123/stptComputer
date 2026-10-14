@@ -1,10 +1,10 @@
-# 基础镜像与软件源可变；软件源统一由 SOURCE_MIRROR 控制（空=官方；cn=国内镜像组合）
-ARG GOLANG_IMAGE=golang:1.22-alpine
-ARG ALPINE_IMAGE=alpine:3.20
+# 基础镜像统一由 IMAGE_REGISTRY 控制 registry 前缀（空=官方 Docker Hub；可指向内网/镜像仓库，需以 / 结尾）
+# 软件源统一由 SOURCE_MIRROR 控制（空=官方；cn=国内镜像组合）
+ARG IMAGE_REGISTRY=
 ARG SOURCE_MIRROR=
 
 # ---- build ----
-FROM ${GOLANG_IMAGE} AS build
+FROM ${IMAGE_REGISTRY}golang:1.22-alpine AS build
 ARG SOURCE_MIRROR
 WORKDIR /src
 COPY go.mod go.sum* ./
@@ -16,7 +16,7 @@ COPY . .
 RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/server ./cmd/server
 
 # ---- runtime ----
-FROM ${ALPINE_IMAGE}
+FROM ${IMAGE_REGISTRY}alpine:3.20
 ARG SOURCE_MIRROR
 RUN if [ "$SOURCE_MIRROR" = "cn" ]; then \
         sed -i "s@dl-cdn.alpinelinux.org@mirrors.aliyun.com@g" /etc/apk/repositories; \

@@ -2,7 +2,7 @@ name: stpt-quiz
 
 services:
   postgres:
-    image: ${POSTGRES_IMAGE:-postgres:15-alpine}
+    image: ${IMAGE_REGISTRY:-}postgres:15-alpine
     environment:
       POSTGRES_USER: quiz
       POSTGRES_PASSWORD: quiz
@@ -17,7 +17,7 @@ services:
     restart: unless-stopped
 
   redis:
-    image: ${REDIS_IMAGE:-redis:7-alpine}
+    image: ${IMAGE_REGISTRY:-}redis:7-alpine
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 3s
@@ -29,8 +29,7 @@ services:
     build:
       context: ../backend
       args:
-        GOLANG_IMAGE: ${GOLANG_IMAGE:-golang:1.22-alpine}
-        ALPINE_IMAGE: ${ALPINE_IMAGE:-alpine:3.20}
+        IMAGE_REGISTRY: ${IMAGE_REGISTRY:-}
         SOURCE_MIRROR: ${SOURCE_MIRROR:-}
     environment:
       APP_PORT: "8080"
@@ -60,8 +59,7 @@ services:
       context: ..
       dockerfile: deploy/web/Dockerfile
       args:
-        NODE_IMAGE: ${NODE_IMAGE:-node:20-alpine}
-        NGINX_IMAGE: ${NGINX_IMAGE:-nginx:1.27-alpine}
+        IMAGE_REGISTRY: ${IMAGE_REGISTRY:-}
         SOURCE_MIRROR: ${SOURCE_MIRROR:-}
     ports:
       - "${WEB_PORT:-8080}:8080"
