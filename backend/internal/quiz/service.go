@@ -18,6 +18,7 @@ import (
 var (
 	ErrQuizNotStarted = errors.New("答题未开始")
 	ErrNoRound        = errors.New("请先开始一轮答题")
+	ErrIdentityBound  = errors.New("该设备已绑定答题身份")
 	ErrQuestionClosed = errors.New("题目不可用")
 	ErrBadRequest     = errors.New("参数错误")
 )
@@ -51,10 +52,14 @@ func (s *Service) StartSession(ctx context.Context, nickname, deviceFP string) (
 	if containsBadWord(nick) {
 		return nil, false, errors.New("昵称含敏感词，请更换")
 	}
-	// 同一设备（浏览器指纹）只允许一个答题身份，重复注册直接恢复原身份
+	// 同一设备只允许一个活跃答题身份：
+	// 同昵称 = 本机恢复原身份；不同昵称 = 拒绝，不侵占原身份，需先放弃
 	if deviceFP != "" {
 		if ex, err := s.store.GetUserByDeviceFP(ctx, deviceFP); err == nil && ex != nil {
-			return ex, true, nil
+			if ex.Nickname == nick {
+				return ex, true, nil
+			}
+			return nil, false, fmt.Errorf("%w「%s」", ErrIdentityBound, ex.Nickname)
 		}
 	}
 	token := randomHex(32)
@@ -66,7 +71,34 @@ func (s *Service) ValidateToken(ctx context.Context, token string) (*store.User,
 	if token == "" {
 		return nil, ErrBadRequest
 	}
-	return s.store.GetUserByToken(ctx, token)
+	u, err := s.store.GetUserByToken(ctx, token)
+	if err != nil {
+		return nil, err
+	}
+	if u.Abandoned {
+		return nil, errors.New("身份已放弃")
+	}
+	return u, nil
+}
+
+// Abandon 放弃当前身份：解除设备绑定、移出排行榜，历史答题记录保留用于统计。
+func (s *Service) Abandon(ctx context.Context, userID int64) error {
+	if err := s.store.AbandonUser(ctx, userID); err != nil {
+		return err
+	}
+	return s.rank.Remove(ctx, userID)
+}
+
+// AbandonByDeviceFP 按设备指纹放弃该设备当前绑定的身份（无身份则静默成功）。
+func (s *Service) AbandonByDeviceFP(ctx context.Context, deviceFP string) error {
+	if deviceFP == "" {
+		return ErrBadRequest
+	}
+	u, err := s.store.GetUserByDeviceFP(ctx, deviceFP)
+	if err != nil || u == nil {
+		return nil
+	}
+	return s.Abandon(ctx, u.ID)
 }
 
 func randomHex(n int) string {

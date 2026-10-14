@@ -24,6 +24,7 @@ type User struct {
 	Nickname  string
 	Token     string
 	DeviceFP  string
+	Abandoned bool
 	CreatedAt time.Time
 }
 
@@ -113,21 +114,37 @@ func (s *Store) CreateUser(ctx context.Context, nickname, token, deviceFP string
 	return u, nil
 }
 
+// GetUserByDeviceFP 只匹配未放弃的身份（放弃后本机可注册新身份）。
 func (s *Store) GetUserByDeviceFP(ctx context.Context, deviceFP string) (*User, error) {
-	return s.getUser(ctx, `SELECT id, nickname, token, device_fp, created_at FROM users WHERE device_fp = $1 ORDER BY id LIMIT 1`, deviceFP)
+	return s.getUser(ctx,
+		`SELECT id, nickname, token, device_fp, abandoned, created_at FROM users WHERE device_fp = $1 AND NOT abandoned ORDER BY id LIMIT 1`,
+		deviceFP)
 }
 
 func (s *Store) GetUserByToken(ctx context.Context, token string) (*User, error) {
-	return s.getUser(ctx, `SELECT id, nickname, token, device_fp, created_at FROM users WHERE token = $1`, token)
+	return s.getUser(ctx, `SELECT id, nickname, token, device_fp, abandoned, created_at FROM users WHERE token = $1`, token)
 }
 
 func (s *Store) GetUser(ctx context.Context, id int64) (*User, error) {
-	return s.getUser(ctx, `SELECT id, nickname, token, device_fp, created_at FROM users WHERE id = $1`, id)
+	return s.getUser(ctx, `SELECT id, nickname, token, device_fp, abandoned, created_at FROM users WHERE id = $1`, id)
+}
+
+// AbandonUser 放弃身份：解除设备绑定并标记弃用（保留答题历史用于统计）。
+func (s *Store) AbandonUser(ctx context.Context, userID int64) error {
+	tag, err := s.pool.Exec(ctx,
+		`UPDATE users SET abandoned = TRUE, device_fp = '' WHERE id = $1`, userID)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
 }
 
 func (s *Store) getUser(ctx context.Context, q string, arg any) (*User, error) {
 	u := &User{}
-	err := s.pool.QueryRow(ctx, q, arg).Scan(&u.ID, &u.Nickname, &u.Token, &u.DeviceFP, &u.CreatedAt)
+	err := s.pool.QueryRow(ctx, q, arg).Scan(&u.ID, &u.Nickname, &u.Token, &u.DeviceFP, &u.Abandoned, &u.CreatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrNotFound
 	}

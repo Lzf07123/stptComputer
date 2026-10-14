@@ -96,6 +96,11 @@ func (r *Rank) RankOf(ctx context.Context, userID int64) (int64, error) {
 	return rnk, nil
 }
 
+// Remove 从排行榜移除（放弃身份时调用）。
+func (r *Rank) Remove(ctx context.Context, userID int64) error {
+	return r.rdb.ZRem(ctx, scoreKey, strconv.FormatInt(userID, 10)).Err()
+}
+
 func (r *Rank) Count(ctx context.Context) (int64, error) {
 	return r.rdb.ZCard(ctx, scoreKey).Result()
 }

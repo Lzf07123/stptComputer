@@ -176,7 +176,28 @@ body {
 
 /* ---------- 答题 ---------- */
 .quiz-wrap { max-width: 680px; margin: 0 auto; }
-.quiz-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+.quiz-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
+.quiz-head-right { display: flex; align-items: center; gap: 10px; }
+.id-tag {
+  margin-left: 8px;
+  border: 1px solid var(--blue);
+  color: var(--blue);
+  border-radius: 4px;
+  padding: 1px 6px;
+  font-size: 12px;
+}
+.mini-quit {
+  border: 1px solid var(--red);
+  background: transparent;
+  color: var(--red);
+  border-radius: 6px;
+  padding: 4px 10px;
+  cursor: pointer;
+  font-size: 12px;
+}
+.mini-quit:hover { background: rgba(220, 38, 38, 0.12); }
+.conflict-box { margin-top: 14px; border: 1px dashed var(--red); border-radius: 8px; padding: 12px; }
+.conflict-box .btn { font-size: 13px; }
 .diff-tag {
   margin-left: 8px;
   border: 1px solid var(--border);

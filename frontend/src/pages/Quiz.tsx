@@ -38,6 +38,8 @@ export default function Quiz() {
   const [qSeconds, setQSeconds] = useState(20)
   const [error, setError] = useState('')
   const [flash, setFlash] = useState('')
+  const [myNick, setMyNick] = useState(() => sessionStorage.getItem('quiz_nick') || '')
+  const [identityConflict, setIdentityConflict] = useState('')
   const locked = useRef(false)
   const sockRef = useRef<QuizSocket | null>(null)
 
@@ -94,6 +96,12 @@ export default function Quiz() {
       connectSocket()
       const flushed = await flushPending()
       if (flushed > 0) setFlash(`已补交 ${flushed} 条缓存的答案`)
+      void api<{ nickname: string }>('/api/me')
+        .then((m) => {
+          setMyNick(m.nickname)
+          sessionStorage.setItem('quiz_nick', m.nickname)
+        })
+        .catch(() => undefined)
       try {
         const cur = await api<RoundResp & { answered: number }>('/api/quiz/current')
         const answered = Math.min(cur.answered, cur.questions.length)
@@ -122,11 +130,14 @@ export default function Quiz() {
     setError('')
     setPhase('loading')
     try {
-      const s = await api<{ token: string; recovered?: boolean }>('/api/session', {
+      const s = await api<{ token: string; nickname: string; recovered?: boolean }>('/api/session', {
         method: 'POST',
         body: JSON.stringify({ nickname, device_fp: getDeviceFP() }),
       })
       setToken(s.token)
+      sessionStorage.setItem('quiz_nick', s.nickname || nickname)
+      setMyNick(s.nickname || nickname)
+      setIdentityConflict('')
       connectSocket()
       const flushed = await flushPending()
       if (flushed > 0) setFlash(`已补交 ${flushed} 条缓存的答案`)
@@ -136,9 +147,40 @@ export default function Quiz() {
       const d = await api<RoundResp>('/api/quiz/round', { method: 'POST' })
       enterRound(d, '')
     } catch (e) {
-      setError((e as Error).message)
+      const err = e as Error & { code?: string }
+      if (err.code === 'identity_bound') {
+        setIdentityConflict(err.message)
+      } else {
+        setError(err.message)
+      }
       setPhase('name')
     }
+  }
+
+  // 放弃当前身份：解除设备绑定，本机可重新注册
+  const abandonIdentity = async (byDevice: boolean) => {
+    try {
+      if (byDevice) {
+        await api('/api/identity/abandon', { method: 'POST', body: JSON.stringify({ device_fp: getDeviceFP() }) })
+      } else {
+        await api('/api/identity/abandon', { method: 'POST' })
+      }
+    } catch {
+      /* 忽略 */
+    }
+    clearToken()
+    sessionStorage.removeItem('quiz_nick')
+    sockRef.current?.close()
+    setMyNick('')
+    setIdentityConflict('')
+    setError('')
+    setFlash('')
+    setQuestions([])
+    setIdx(0)
+    setFeedback(null)
+    setSelected(null)
+    locked.current = false
+    setPhase('name')
   }
 
   async function answer(i: number | null, requestId: string) {
@@ -213,8 +255,14 @@ export default function Quiz() {
           <span className="muted">
             第 {idx + 1} / {total} 题 · 第 {roundNo} 轮
             <span className={`diff-tag d-${q.difficulty}`}>{q.difficulty}</span>
+            <span className="id-tag">答题身份：{myNick}</span>
           </span>
-          <span className={`timer${seconds <= 5 ? ' danger' : ''}`}>{seconds}s</span>
+          <span className="quiz-head-right">
+            <span className={`timer${seconds <= 5 ? ' danger' : ''}`}>{seconds}s</span>
+            <button className="mini-quit" onClick={() => void abandonIdentity(false)}>
+              放弃身份
+            </button>
+          </span>
         </div>
         <div className="progress">
           <div className="progress-bar" style={{ width: `${((idx + (feedback ? 1 : 0)) / total) * 100}%` }} />
@@ -267,6 +315,14 @@ export default function Quiz() {
           {phase === 'loading' ? '加载中…' : '进入答题'}
         </button>
       </form>
+      {identityConflict && (
+        <div className="conflict-box">
+          <p className="error">{identityConflict}</p>
+          <button className="btn" onClick={() => void abandonIdentity(true)}>
+            放弃原身份，重新注册
+          </button>
+        </div>
+      )}
       {error && <p className="error">{error}</p>}
       {loadPending().length > 0 && getToken() === null && (
         <p className="muted">检测到 {loadPending().length} 条未提交答案，答题后将自动补交</p>

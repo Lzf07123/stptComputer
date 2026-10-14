@@ -36,7 +36,13 @@ export async function api<T = any>(path: string, opts: RequestInit = {}): Promis
     /* 空响应 */
   }
   if (!res.ok) {
-    throw new Error((body && body.error) || `HTTP ${res.status}`)
+    const err = new Error((body && body.error) || `HTTP ${res.status}`) as Error & {
+      status?: number
+      code?: string
+    }
+    err.status = res.status
+    if (body && body.code) err.code = body.code
+    throw err
   }
   return body as T
 }

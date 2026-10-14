@@ -42,6 +42,7 @@ func (s *Server) Handler() http.Handler {
 	// 公开
 	mux.HandleFunc("GET /api/backgrounds", s.handleBackgrounds)
 	mux.HandleFunc("GET /api/stats", s.handleStats)
+	mux.HandleFunc("POST /api/identity/abandon", s.handleAbandonIdentity)
 	mux.HandleFunc("POST /api/session", s.handleSession)
 	mux.HandleFunc("GET /api/rank", s.handleRank)
 	mux.HandleFunc("GET /api/qrcode", s.handleQrcode)
@@ -155,6 +156,42 @@ func readJSON(r *http.Request, v any) error {
 
 // ---------- handlers ----------
 
+// handleAbandonIdentity 放弃答题身份：带 token 放弃自己；否则按 device_fp 放弃本机绑定身份。
+func (s *Server) handleAbandonIdentity(w http.ResponseWriter, r *http.Request) {
+	tok := r.URL.Query().Get("token")
+	if tok == "" {
+		if h := r.Header.Get("Authorization"); strings.HasPrefix(h, "Bearer ") {
+			tok = strings.TrimPrefix(h, "Bearer ")
+		}
+	}
+	if tok != "" {
+		u, err := s.svc.ValidateToken(r.Context(), tok)
+		if err != nil {
+			writeErr(w, http.StatusUnauthorized, "token 无效")
+			return
+		}
+		if err := s.svc.Abandon(r.Context(), u.ID); err != nil {
+			writeErr(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]string{"ok": "true"})
+		return
+	}
+	var req struct {
+		DeviceFP string `json:"device_fp"`
+	}
+	_ = readJSON(r, &req)
+	if req.DeviceFP == "" {
+		writeErr(w, http.StatusBadRequest, "缺少 token 或 device_fp")
+		return
+	}
+	if err := s.svc.AbandonByDeviceFP(r.Context(), req.DeviceFP); err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"ok": "true"})
+}
+
 func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {
 	st, err := s.svc.Stats(r.Context())
 	if err != nil {
@@ -179,6 +216,10 @@ func (s *Server) handleSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	u, recovered, err := s.svc.StartSession(r.Context(), req.Nickname, req.DeviceFP)
+	if errors.Is(err, quiz.ErrIdentityBound) {
+		writeJSON(w, http.StatusConflict, map[string]string{"error": err.Error(), "code": "identity_bound"})
+		return
+	}
 	if err != nil {
 		writeErr(w, http.StatusBadRequest, err.Error())
 		return
