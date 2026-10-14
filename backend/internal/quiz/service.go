@@ -89,6 +89,7 @@ func (s *Service) ValidateToken(ctx context.Context, token string) (*store.User,
 }
 
 // Abandon 放弃身份：必须证明该身份属于本机（设备指纹一致），否则拒绝。
+// 排行榜记录保留（历史足迹），仅身份失效：token 作废、设备解绑、昵称封存。
 func (s *Service) Abandon(ctx context.Context, userID int64, deviceFP string) error {
 	u, err := s.store.GetUser(ctx, userID)
 	if err != nil {
@@ -97,10 +98,7 @@ func (s *Service) Abandon(ctx context.Context, userID int64, deviceFP string) er
 	if u.DeviceFP == "" || deviceFP == "" || u.DeviceFP != deviceFP {
 		return errors.New("不可放弃不属于本机的身份")
 	}
-	if err := s.store.AbandonUser(ctx, userID); err != nil {
-		return err
-	}
-	return s.rank.Remove(ctx, userID)
+	return s.store.AbandonUser(ctx, userID)
 }
 
 // BoundIdentity 返回该设备当前绑定的活跃身份；未绑定返回 store.ErrNotFound。
@@ -117,11 +115,8 @@ func (s *Service) AbandonByDeviceFP(ctx context.Context, deviceFP string) error 
 	if err != nil || u == nil {
 		return nil
 	}
-	// 本机路径：设备指纹即归属证明
-	if err := s.store.AbandonUser(ctx, u.ID); err != nil {
-		return err
-	}
-	return s.rank.Remove(ctx, u.ID)
+	// 本机路径：设备指纹即归属证明；排行榜记录保留
+	return s.store.AbandonUser(ctx, u.ID)
 }
 
 func randomHex(n int) string {
