@@ -31,7 +31,7 @@ docker compose -f deploy/docker-compose.yml up -d --build
 
 停止：`docker compose -f deploy/docker-compose.yml down`（加 `-v` 清空数据库与上传文件）
 
-## 环境变量（.env，不入库）
+## 环境变量（.env，不入库；模板见 .env.example）
 
 | 变量 | 默认 | 说明 |
 |---|---|---|
@@ -39,6 +39,31 @@ docker compose -f deploy/docker-compose.yml up -d --build
 | `QUESTION_SECONDS` | 20 | 每题倒计时（秒） |
 | `QUESTION_COUNT` | 10 | 每轮抽题数 |
 | `WEB_PORT` | 8080 | 对外端口 |
+
+### 基础镜像与软件源（构建/部署阶段均可变）
+
+| 变量 | 默认 | 作用 |
+|---|---|---|
+| `GOLANG_IMAGE` | golang:1.22-alpine | 后端构建镜像 |
+| `ALPINE_IMAGE` | alpine:3.20 | 后端运行镜像 |
+| `NODE_IMAGE` | node:20-alpine | 前端构建镜像 |
+| `NGINX_IMAGE` | nginx:1.27-alpine | Web/反代镜像 |
+| `POSTGRES_IMAGE` | postgres:15-alpine | 数据库镜像 |
+| `REDIS_IMAGE` | redis:7-alpine | 缓存镜像 |
+| `GOPROXY` | https://proxy.golang.org,direct | Go 模块代理 |
+| `GOSUMDB` | sum.golang.org | Go 校验和库 |
+| `NPM_REGISTRY` | https://registry.npmjs.org/ | npm 源 |
+| `APK_MIRROR` | （空） | Alpine 包源镜像域名 |
+
+- 镜像变量为完整引用，**可带 registry 前缀**（如 `mirror.example.com/golang:1.22-alpine`），适配内网仓库。
+- 国内加速示例（写入 `.env` 后重新 `up -d --build`）：
+
+```bash
+GOPROXY=https://goproxy.cn,direct
+NPM_REGISTRY=https://registry.npmmirror.com/
+APK_MIRROR=mirrors.aliyun.com
+#GOLANG_IMAGE=docker.1ms.run/library/golang:1.22-alpine  # 如需镜像仓库前缀
+```
 
 页脚/备案/二维码/背景图等运行期内容一律在后台配置，持久化于 postgres 与 uploads 两个 Docker 数据卷，不走环境变量。
 

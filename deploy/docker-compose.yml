@@ -2,7 +2,7 @@ name: stpt-quiz
 
 services:
   postgres:
-    image: postgres:15-alpine
+    image: ${POSTGRES_IMAGE:-postgres:15-alpine}
     environment:
       POSTGRES_USER: quiz
       POSTGRES_PASSWORD: quiz
@@ -17,7 +17,7 @@ services:
     restart: unless-stopped
 
   redis:
-    image: redis:7-alpine
+    image: ${REDIS_IMAGE:-redis:7-alpine}
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 3s
@@ -26,7 +26,14 @@ services:
     restart: unless-stopped
 
   app:
-    build: ../backend
+    build:
+      context: ../backend
+      args:
+        GOLANG_IMAGE: ${GOLANG_IMAGE:-golang:1.22-alpine}
+        ALPINE_IMAGE: ${ALPINE_IMAGE:-alpine:3.20}
+        GOPROXY: ${GOPROXY:-https://proxy.golang.org,direct}
+        GOSUMDB: ${GOSUMDB:-sum.golang.org}
+        APK_MIRROR: ${APK_MIRROR:-}
     environment:
       APP_PORT: "8080"
       DATABASE_URL: postgres://quiz:quiz@postgres:5432/quiz?sslmode=disable
@@ -54,6 +61,10 @@ services:
     build:
       context: ..
       dockerfile: deploy/web/Dockerfile
+      args:
+        NODE_IMAGE: ${NODE_IMAGE:-node:20-alpine}
+        NGINX_IMAGE: ${NGINX_IMAGE:-nginx:1.27-alpine}
+        NPM_REGISTRY: ${NPM_REGISTRY:-https://registry.npmjs.org/}
     ports:
       - "${WEB_PORT:-8080}:8080"
     volumes:
