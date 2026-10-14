@@ -114,6 +114,11 @@ func (s *Store) CreateUser(ctx context.Context, nickname, token, deviceFP string
 	return u, nil
 }
 
+// GetUserByNickname 按昵称查用户（含已放弃），用于昵称唯一性与封存校验。
+func (s *Store) GetUserByNickname(ctx context.Context, nickname string) (*User, error) {
+	return s.getUser(ctx, `SELECT id, nickname, token, device_fp, abandoned, created_at FROM users WHERE nickname = $1 ORDER BY id LIMIT 1`, nickname)
+}
+
 // GetUserByDeviceFP 只匹配未放弃的身份（放弃后本机可注册新身份）。
 func (s *Store) GetUserByDeviceFP(ctx context.Context, deviceFP string) (*User, error) {
 	return s.getUser(ctx,

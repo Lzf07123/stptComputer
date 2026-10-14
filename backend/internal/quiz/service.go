@@ -62,6 +62,13 @@ func (s *Service) StartSession(ctx context.Context, nickname, deviceFP string) (
 			return nil, false, fmt.Errorf("%w「%s」", ErrIdentityBound, ex.Nickname)
 		}
 	}
+	// 昵称全局唯一：已放弃的身份永久封存，任何人都不得复用（含本人）
+	if ex, err := s.store.GetUserByNickname(ctx, nick); err == nil && ex != nil {
+		if ex.Abandoned {
+			return nil, false, errors.New("该昵称已随身份放弃，不可再次使用")
+		}
+		return nil, false, errors.New("该昵称已被使用，请更换")
+	}
 	token := randomHex(32)
 	u, err := s.store.CreateUser(ctx, nick, token, deviceFP)
 	return u, false, err
