@@ -60,5 +60,11 @@ CREATE TABLE IF NOT EXISTS footer_settings (
     owner      TEXT NOT NULL DEFAULT '',
     license    TEXT NOT NULL DEFAULT '',
     icp        TEXT NOT NULL DEFAULT '',
+    icp_icon   TEXT NOT NULL DEFAULT '',
+    police     TEXT NOT NULL DEFAULT '',
+    police_icon TEXT NOT NULL DEFAULT '',
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+ALTER TABLE footer_settings ADD COLUMN IF NOT EXISTS icp_icon TEXT NOT NULL DEFAULT '';
+ALTER TABLE footer_settings ADD COLUMN IF NOT EXISTS police TEXT NOT NULL DEFAULT '';
+ALTER TABLE footer_settings ADD COLUMN IF NOT EXISTS police_icon TEXT NOT NULL DEFAULT '';

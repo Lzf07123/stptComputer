@@ -24,10 +24,10 @@ export default function Admin() {
   const [options, setOptions] = useState('')
   const [answerIdx, setAnswerIdx] = useState(0)
   const [score, setScore] = useState(10)
-  const [qrUrl, setQrUrl] = useState('')
   const [bgs, setBgs] = useState<Bg[]>([])
   const [uploading, setUploading] = useState(false)
-  const [footer, setFooter] = useState({ owner: '', license: '', icp: '' })
+  const [footer, setFooter] = useState({ owner: '', license: '', icp: '', icp_icon: '', police: '', police_icon: '' })
+  const [qrNow, setQrNow] = useState('')
 
   const adminHeaders = useCallback(
     () => ({ 'X-Admin-Token': pass }),
@@ -52,9 +52,18 @@ export default function Admin() {
     }
   }, [adminHeaders])
 
+  const reloadQr = useCallback(async () => {
+    try {
+      const d = await api<{ image_url: string }>('/api/qrcode')
+      setQrNow(d.image_url || '')
+    } catch {
+      /* 忽略 */
+    }
+  }, [])
+
   const reloadFooter = useCallback(async () => {
     try {
-      const d = await api<{ footer: { owner: string; license: string; icp: string } }>('/api/admin/footer', { headers: adminHeaders() })
+      const d = await api<{ footer: { owner: string; license: string; icp: string; icp_icon: string; police: string; police_icon: string } }>('/api/admin/footer', { headers: adminHeaders() })
       setFooter(d.footer)
     } catch {
       /* 忽略 */
@@ -66,8 +75,26 @@ export default function Admin() {
       void reload()
       void reloadBgs()
       void reloadFooter()
+      void reloadQr()
     }
-  }, [pass, reload, reloadBgs, reloadFooter])
+  }, [pass, reload, reloadBgs, reloadFooter, reloadQr])
+
+  // 上传到 /uploads 并返回 URL（群二维码、备案图标等）
+  const uploadImage = async (f: File): Promise<string> => {
+    const fd = new FormData()
+    fd.append('file', f)
+    const res = await fetch('/api/admin/uploads', {
+      method: 'POST',
+      headers: { 'X-Admin-Token': pass },
+      body: fd,
+    })
+    if (!res.ok) {
+      const b = await res.json().catch(() => ({ error: `HTTP ${res.status}` }))
+      throw new Error(b.error || `HTTP ${res.status}`)
+    }
+    const d = await res.json()
+    return d.url as string
+  }
 
   const uploadOne = async (f: File): Promise<void> => {
     const fd = new FormData()
@@ -188,12 +215,28 @@ export default function Admin() {
           <div className="admin-panel">
             <h3>群二维码</h3>
             <label className="field">
-              新二维码图片 URL
-              <input value={qrUrl} onChange={(e) => setQrUrl(e.target.value)} placeholder="https://…/qrcode.png" />
+              上传新二维码图片（替换当前展示）
+              <input
+                type="file"
+                accept="image/*"
+                onChange={async (e) => {
+                  const f = e.target.files && e.target.files[0]
+                  if (!f) return
+                  try {
+                    const url = await uploadImage(f)
+                    await act('/api/admin/qrcode', { image_url: url }, '已切换群二维码')
+                    void reloadQr()
+                  } catch (err) {
+                    setMsg(`✘ ${(err as Error).message}`)
+                  }
+                }}
+              />
             </label>
-            <button className="btn" onClick={() => void act('/api/admin/qrcode', { image_url: qrUrl }, '已切换二维码')}>
-              切换活码
-            </button>
+            {qrNow ? (
+              <img className="thumb big" src={qrNow} alt="当前群二维码" />
+            ) : (
+              <p className="muted">尚未上传群二维码</p>
+            )}
           </div>
 
           <div className="admin-panel">
@@ -221,6 +264,52 @@ export default function Admin() {
                 onChange={(e) => setFooter({ ...footer, icp: e.target.value })}
                 placeholder="粤ICP备XXXXXXXX号"
               />
+            </label>
+            <label className="field">
+              ICP 备案图标（后台上传）
+              <input
+                type="file"
+                accept="image/*"
+                onChange={async (e) => {
+                  const f = e.target.files && e.target.files[0]
+                  if (!f) return
+                  try {
+                    const url = await uploadImage(f)
+                    setFooter({ ...footer, icp_icon: url })
+                    setMsg('✔ ICP 图标已上传，记得点保存')
+                  } catch (err) {
+                    setMsg(`✘ ${(err as Error).message}`)
+                  }
+                }}
+              />
+              {footer.icp_icon && <img className="thumb" src={footer.icp_icon} alt="ICP 图标预览" />}
+            </label>
+            <label className="field">
+              公安备案号（如：粤公网安备 4405XXXXXXXXXX号）
+              <input
+                value={footer.police}
+                onChange={(e) => setFooter({ ...footer, police: e.target.value })}
+                placeholder="粤公网安备 XXXXXXXXXXXX号"
+              />
+            </label>
+            <label className="field">
+              公安备案图标（后台上传）
+              <input
+                type="file"
+                accept="image/*"
+                onChange={async (e) => {
+                  const f = e.target.files && e.target.files[0]
+                  if (!f) return
+                  try {
+                    const url = await uploadImage(f)
+                    setFooter({ ...footer, police_icon: url })
+                    setMsg('✔ 公安图标已上传，记得点保存')
+                  } catch (err) {
+                    setMsg(`✘ ${(err as Error).message}`)
+                  }
+                }}
+              />
+              {footer.police_icon && <img className="thumb" src={footer.police_icon} alt="公安图标预览" />}
             </label>
             <button className="btn btn-accent" onClick={() => void act('/api/admin/footer', footer, '页脚信息已更新')}>
               保存页脚

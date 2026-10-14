@@ -315,33 +315,36 @@ func (s *Store) InsertAnnouncement(ctx context.Context, content, typ string) (*A
 // ---------- footer ----------
 
 type Footer struct {
-	Owner   string `json:"owner"`
-	License string `json:"license"`
-	ICP     string `json:"icp"`
+	Owner      string `json:"owner"`
+	License    string `json:"license"`
+	ICP        string `json:"icp"`
+	ICPIcon    string `json:"icp_icon"`
+	Police     string `json:"police"`
+	PoliceIcon string `json:"police_icon"`
 }
 
-// EnsureFooterDefaults 首次启动时写入环境变量默认值；后台修改后覆盖。
-func (s *Store) EnsureFooterDefaults(ctx context.Context, owner, license, icp string) error {
+// EnsureFooterDefaults 首次启动时创建空行；内容完全由后台定义并持久化。
+func (s *Store) EnsureFooterDefaults(ctx context.Context) error {
 	_, err := s.pool.Exec(ctx,
-		`INSERT INTO footer_settings (id, owner, license, icp) VALUES (1, $1, $2, $3) ON CONFLICT (id) DO NOTHING`,
-		owner, license, icp)
+		`INSERT INTO footer_settings (id) VALUES (1) ON CONFLICT (id) DO NOTHING`)
 	return err
 }
 
 func (s *Store) GetFooterSettings(ctx context.Context) (*Footer, error) {
 	f := &Footer{}
 	err := s.pool.QueryRow(ctx,
-		`SELECT owner, license, icp FROM footer_settings WHERE id = 1`).Scan(&f.Owner, &f.License, &f.ICP)
+		`SELECT owner, license, icp, icp_icon, police, police_icon FROM footer_settings WHERE id = 1`).
+		Scan(&f.Owner, &f.License, &f.ICP, &f.ICPIcon, &f.Police, &f.PoliceIcon)
 	if err != nil {
 		return nil, err
 	}
 	return f, nil
 }
 
-func (s *Store) SaveFooterSettings(ctx context.Context, owner, license, icp string) error {
+func (s *Store) SaveFooterSettings(ctx context.Context, f *Footer) error {
 	_, err := s.pool.Exec(ctx,
-		`UPDATE footer_settings SET owner = $1, license = $2, icp = $3, updated_at = now() WHERE id = 1`,
-		owner, license, icp)
+		`UPDATE footer_settings SET owner = $1, license = $2, icp = $3, icp_icon = $4, police = $5, police_icon = $6, updated_at = now() WHERE id = 1`,
+		f.Owner, f.License, f.ICP, f.ICPIcon, f.Police, f.PoliceIcon)
 	return err
 }
 

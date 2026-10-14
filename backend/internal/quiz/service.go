@@ -239,14 +239,17 @@ func (s *Service) Footer(ctx context.Context) (*store.Footer, error) {
 	return s.store.GetFooterSettings(ctx)
 }
 
-func (s *Service) SaveFooter(ctx context.Context, owner, license, icp string) error {
-	owner = strings.TrimSpace(owner)
-	license = strings.TrimSpace(license)
-	icp = strings.TrimSpace(icp)
-	if len([]rune(owner)) > 100 || len([]rune(license)) > 100 || len([]rune(icp)) > 50 {
+func (s *Service) SaveFooter(ctx context.Context, f *store.Footer) error {
+	f.Owner = strings.TrimSpace(f.Owner)
+	f.License = strings.TrimSpace(f.License)
+	f.ICP = strings.TrimSpace(f.ICP)
+	f.Police = strings.TrimSpace(f.Police)
+	if len([]rune(f.Owner)) > 100 || len([]rune(f.License)) > 100 ||
+		len([]rune(f.ICP)) > 60 || len([]rune(f.Police)) > 60 ||
+		len([]rune(f.ICPIcon)) > 200 || len([]rune(f.PoliceIcon)) > 200 {
 		return ErrBadRequest
 	}
-	return s.store.SaveFooterSettings(ctx, owner, license, icp)
+	return s.store.SaveFooterSettings(ctx, f)
 }
 
 // ---------- backgrounds ----------

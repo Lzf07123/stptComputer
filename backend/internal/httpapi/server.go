@@ -66,6 +66,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/admin/backgrounds", s.withAdmin(s.handleAdminListBackgrounds))
 	mux.HandleFunc("POST /api/admin/backgrounds/{id}/active", s.withAdmin(s.handleAdminSetBgActive))
 	mux.HandleFunc("DELETE /api/admin/backgrounds/{id}", s.withAdmin(s.handleAdminDeleteBackground))
+	mux.HandleFunc("POST /api/admin/uploads", s.withAdmin(s.handleAdminUpload))
 	mux.HandleFunc("GET /api/admin/footer", s.withAdmin(s.handleAdminGetFooter))
 	mux.HandleFunc("POST /api/admin/footer", s.withAdmin(s.handleAdminSaveFooter))
 
@@ -274,11 +275,7 @@ func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
 	}
 	footer, err := s.svc.Footer(r.Context())
 	if err != nil {
-		footer = &store.Footer{
-			Owner:   s.cfg.FooterOwner,
-			License: s.cfg.FooterLicense,
-			ICP:     s.cfg.FooterICP,
-		}
+		footer = &store.Footer{}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"title":            s.svc.Title(),
@@ -342,9 +339,13 @@ func (s *Server) handleAdminQrcode(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "请求体格式错误")
 		return
 	}
+	old, _ := s.svc.Qrcode(r.Context())
 	if err := s.svc.SetQrcode(r.Context(), req.ImageURL); err != nil {
 		writeErr(w, http.StatusBadRequest, err.Error())
 		return
+	}
+	if old != nil {
+		s.removeUploadFile(old.ImageURL)
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"ok": "true"})
 }
@@ -413,16 +414,17 @@ func (s *Server) handleBackgrounds(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"backgrounds": urls})
 }
 
-func (s *Server) handleAdminUploadBackground(w http.ResponseWriter, r *http.Request) {
+// saveUploadedImage 保存 multipart 里的图片文件，返回 /uploads/xxx 路径；失败时已写响应。
+func (s *Server) saveUploadedImage(w http.ResponseWriter, r *http.Request) (string, bool) {
 	r.Body = http.MaxBytesReader(w, r.Body, 10<<20)
 	if err := r.ParseMultipartForm(10 << 20); err != nil {
 		writeErr(w, http.StatusBadRequest, "文件过大或格式错误（上限 10MB）")
-		return
+		return "", false
 	}
 	file, _, err := r.FormFile("file")
 	if err != nil {
 		writeErr(w, http.StatusBadRequest, "缺少 file 字段")
-		return
+		return "", false
 	}
 	defer file.Close()
 
@@ -441,30 +443,54 @@ func (s *Server) handleAdminUploadBackground(w http.ResponseWriter, r *http.Requ
 		ext = ".gif"
 	default:
 		writeErr(w, http.StatusBadRequest, "仅支持 JPG/PNG/WebP/GIF 图片")
-		return
+		return "", false
 	}
 	if _, err := file.Seek(0, 0); err != nil {
 		writeErr(w, http.StatusInternalServerError, err.Error())
-		return
+		return "", false
 	}
 	if err := os.MkdirAll(s.cfg.UploadDir, 0o755); err != nil {
 		writeErr(w, http.StatusInternalServerError, err.Error())
-		return
+		return "", false
 	}
-	name := fmt.Sprintf("bg-%d-%s%s", time.Now().UnixNano(), randHex(4), ext)
+	name := fmt.Sprintf("up-%d-%s%s", time.Now().UnixNano(), randHex(4), ext)
 	out, err := os.Create(filepath.Join(s.cfg.UploadDir, name))
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err.Error())
-		return
+		return "", false
 	}
 	if _, err := io.Copy(out, file); err != nil {
 		out.Close()
 		writeErr(w, http.StatusInternalServerError, err.Error())
-		return
+		return "", false
 	}
 	out.Close()
+	return "/uploads/" + name, true
+}
 
-	bg, err := s.svc.AddBackground(r.Context(), "/uploads/"+name)
+// removeUploadFile 清理 /uploads/ 下的旧文件（切换后防止残留）。
+func (s *Server) removeUploadFile(p string) {
+	if p == "" || !strings.HasPrefix(p, "/uploads/") {
+		return
+	}
+	_ = os.Remove(filepath.Join(s.cfg.UploadDir, filepath.Base(p)))
+}
+
+// 通用上传：返回文件路径，供二维码/备案图标等使用
+func (s *Server) handleAdminUpload(w http.ResponseWriter, r *http.Request) {
+	url, ok := s.saveUploadedImage(w, r)
+	if !ok {
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"url": url})
+}
+
+func (s *Server) handleAdminUploadBackground(w http.ResponseWriter, r *http.Request) {
+	url, ok := s.saveUploadedImage(w, r)
+	if !ok {
+		return
+	}
+	bg, err := s.svc.AddBackground(r.Context(), url)
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
@@ -527,24 +553,30 @@ func randHex(n int) string {
 func (s *Server) handleAdminGetFooter(w http.ResponseWriter, r *http.Request) {
 	f, err := s.svc.Footer(r.Context())
 	if err != nil {
-		f = &store.Footer{Owner: s.cfg.FooterOwner, License: s.cfg.FooterLicense, ICP: s.cfg.FooterICP}
+		f = &store.Footer{}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"footer": f})
 }
 
 func (s *Server) handleAdminSaveFooter(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		Owner   string `json:"owner"`
-		License string `json:"license"`
-		ICP     string `json:"icp"`
-	}
+	var req store.Footer
 	if err := readJSON(r, &req); err != nil {
 		writeErr(w, http.StatusBadRequest, "请求体格式错误")
 		return
 	}
-	if err := s.svc.SaveFooter(r.Context(), req.Owner, req.License, req.ICP); err != nil {
+	old, _ := s.svc.Footer(r.Context())
+	if err := s.svc.SaveFooter(r.Context(), &req); err != nil {
 		writeErr(w, http.StatusBadRequest, err.Error())
 		return
+	}
+	// 图标被替换/清空后清理旧文件
+	if old != nil {
+		if old.ICPIcon != req.ICPIcon {
+			s.removeUploadFile(old.ICPIcon)
+		}
+		if old.PoliceIcon != req.PoliceIcon {
+			s.removeUploadFile(old.PoliceIcon)
+		}
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"ok": "true"})
 }

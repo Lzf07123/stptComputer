@@ -37,7 +37,7 @@ func main() {
 	}
 	pub := publish.New(cfg.RedisAddr)
 
-	if err := st.EnsureFooterDefaults(ctx, cfg.FooterOwner, cfg.FooterLicense, cfg.FooterICP); err != nil {
+	if err := st.EnsureFooterDefaults(ctx); err != nil {
 		log.Fatalf("footer defaults: %v", err)
 	}
 
