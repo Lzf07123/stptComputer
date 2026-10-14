@@ -6,15 +6,16 @@ const ParticlesBg = lazy(() => import('../components/ParticlesBg'))
 
 interface Motion {
   copies: number
-  gridH: number
+  stripW: number
   dur: number
   scroll: boolean
+  rows: number
 }
 
 export default function Home() {
   const [bgs, setBgs] = useState<string[]>([])
-  const gridRef = useRef<HTMLDivElement>(null)
-  const [motion, setMotion] = useState<Motion>({ copies: 1, gridH: 0, dur: 24, scroll: false })
+  const stripRef = useRef<HTMLDivElement>(null)
+  const [motion, setMotion] = useState<Motion>({ copies: 1, stripW: 0, dur: 24, scroll: false, rows: 3 })
 
   // 拉取后台配置的背景图；没有则回退粒子动画
   useEffect(() => {
@@ -23,18 +24,21 @@ export default function Home() {
       .catch(() => undefined)
   }, [])
 
-  // 按原比例多行照片墙：内容高于一屏时纵向无缝滚动；
-  // 不超过一屏时静止展示（图少自适应）。
+  // 多行照片带横向无缝滚动：带宽超过视口时滚动，否则静止；
+  // 行数随设备自适应（桌面 3 行 / 手机 2 行），图片保持原比例。
   const calc = useCallback(() => {
-    const el = gridRef.current
+    const el = stripRef.current
     if (!el || bgs.length === 0) return
-    const gridH = el.offsetHeight
-    const vh = window.innerHeight
-    const scroll = gridH > vh
-    const copies = scroll ? Math.ceil(vh / Math.max(gridH, 1)) + 2 : 1
-    const dur = Math.max(gridH / 26, 24) // ~26px/s
+    const stripW = el.scrollWidth
+    const vw = window.innerWidth
+    const rows = vw < 640 ? 2 : 3
+    const scroll = stripW > vw
+    const copies = scroll ? Math.ceil(vw / Math.max(stripW, 1)) + 2 : 1
+    const dur = Math.max(stripW / 30, 24) // ~30px/s
     setMotion((m) =>
-      m.gridH === gridH && m.scroll === scroll ? m : { copies, gridH, dur, scroll },
+      m.stripW === stripW && m.scroll === scroll && m.rows === rows
+        ? m
+        : { copies, stripW, dur, scroll, rows },
     )
   }, [bgs])
 
@@ -47,7 +51,7 @@ export default function Home() {
 
   const trackStyle = {
     animationDuration: `${motion.dur}s`,
-    '--grid-h': `${motion.gridH}px`,
+    '--strip-w': `${motion.stripW}px`,
   } as CSSProperties
 
   return (
@@ -55,11 +59,16 @@ export default function Home() {
       {bgs.length > 0 ? (
         <div className="bg-marquee" aria-hidden="true">
           <div
-            className={`bg-track-v${motion.scroll ? '' : ' static'}`}
+            className={`bg-track-h${motion.scroll ? '' : ' static'}`}
             style={trackStyle}
           >
             {Array.from({ length: motion.copies }).map((_, c) => (
-              <div key={c} className="bg-grid" ref={c === 0 ? gridRef : undefined}>
+              <div
+                key={c}
+                className="bg-strip"
+                ref={c === 0 ? stripRef : undefined}
+                style={{ gridTemplateRows: `repeat(${motion.rows}, minmax(0, 1fr))` }}
+              >
                 {bgs.map((u) => (
                   <img
                     key={`${u}-${c}`}
