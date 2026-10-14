@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { Navigate, useBlocker } from 'react-router-dom'
+import { Navigate, useBlocker, useNavigate } from 'react-router-dom'
 import { api, clearToken, flushPending, getDeviceFP, getToken, loadPending, pushPending, setToken } from '../api/client'
 import { QuizSocket, wsURL } from '../ws/socket'
 
@@ -46,6 +46,8 @@ export default function Quiz() {
   const [abandonReq, setAbandonReq] = useState<{ byDevice: boolean; step: 'ask' | 'final' } | null>(null)
   const locked = useRef(false)
   const sockRef = useRef<QuizSocket | null>(null)
+  const nav = useNavigate()
+  const allowLeaveRef = useRef(false)
 
   // 建立带 token 的实时连接（在线人次统计/特效/公告）
   const connectSocket = () => {
@@ -91,12 +93,24 @@ export default function Quiz() {
   const blocker = useBlocker(phase === 'quiz')
   useEffect(() => {
     if (blocker.state !== 'blocked') return
+    // 「退出答题」按钮主动退出：跳过确认
+    if (allowLeaveRef.current) {
+      allowLeaveRef.current = false
+      blocker.proceed()
+      return
+    }
     if (window.confirm('答题进行中，确定要离开本页吗？')) {
       blocker.proceed()
     } else {
       blocker.reset()
     }
   }, [blocker])
+
+  // 退出答题：保留身份与进度，返回首页
+  const exitQuiz = () => {
+    allowLeaveRef.current = true
+    nav('/')
+  }
 
   function enterRound(d: RoundResp, flashMsg: string) {
     setRoundNo(d.round_no)
@@ -344,6 +358,9 @@ export default function Quiz() {
           </span>
           <span className="quiz-head-right">
             <span className={`timer${seconds <= 5 ? ' danger' : ''}`}>{seconds}s</span>
+            <button className="mini-exit" onClick={exitQuiz} title="保留身份与进度，返回首页">
+              退出答题
+            </button>
             <button className="mini-quit" onClick={() => requestAbandon(false)}>
               放弃身份
             </button>
