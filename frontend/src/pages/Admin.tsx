@@ -1,5 +1,11 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useState, type ChangeEvent } from 'react'
 import { api } from '../api/client'
+
+interface Bg {
+  id: number
+  file_path: string
+  active: boolean
+}
 
 interface Question {
   id: number
@@ -19,6 +25,7 @@ export default function Admin() {
   const [answerIdx, setAnswerIdx] = useState(0)
   const [score, setScore] = useState(10)
   const [qrUrl, setQrUrl] = useState('')
+  const [bgs, setBgs] = useState<Bg[]>([])
 
   const adminHeaders = useCallback(
     () => ({ 'X-Admin-Token': pass }),
@@ -34,9 +41,59 @@ export default function Admin() {
     }
   }, [adminHeaders])
 
+  const reloadBgs = useCallback(async () => {
+    try {
+      const d = await api<{ backgrounds: Bg[] }>('/api/admin/backgrounds', { headers: adminHeaders() })
+      setBgs(d.backgrounds || [])
+    } catch {
+      /* 忽略 */
+    }
+  }, [adminHeaders])
+
   useEffect(() => {
-    if (pass) void reload()
-  }, [pass, reload])
+    if (pass) {
+      void reload()
+      void reloadBgs()
+    }
+  }, [pass, reload, reloadBgs])
+
+  const onPickBg = (e: ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files && e.target.files[0]
+    if (f) void uploadBg(f)
+  }
+
+  const uploadBg = async (f: File) => {
+    const fd = new FormData()
+    fd.append('file', f)
+    try {
+      const res = await fetch('/api/admin/backgrounds', {
+        method: 'POST',
+        headers: { 'X-Admin-Token': pass },
+        body: fd,
+      })
+      if (!res.ok) {
+        const b = await res.json().catch(() => ({ error: '上传失败' }))
+        throw new Error(b.error || '上传失败')
+      }
+      setMsg('✔ 背景已上传，首页将自动轮播')
+      void reloadBgs()
+    } catch (e) {
+      setMsg(`✘ ${(e as Error).message}`)
+    }
+  }
+
+  const toggleBg = (b: Bg) =>
+    void act(`/api/admin/backgrounds/${b.id}/active`, { active: !b.active }, b.active ? '背景已停用' : '背景已启用')
+
+  const delBg = async (b: Bg) => {
+    try {
+      await api(`/api/admin/backgrounds/${b.id}`, { method: 'DELETE', headers: adminHeaders() })
+      setMsg('✔ 背景已删除')
+      void reloadBgs()
+    } catch (e) {
+      setMsg(`✘ ${(e as Error).message}`)
+    }
+  }
 
   async function act(path: string, body: any, okMsg: string) {
     try {
@@ -102,6 +159,33 @@ export default function Admin() {
             <button className="btn" onClick={() => void act('/api/admin/qrcode', { image_url: qrUrl }, '已切换二维码')}>
               切换活码
             </button>
+          </div>
+
+          <div className="admin-panel">
+            <h3>首页背景轮播</h3>
+            <label className="field">
+              上传图片（建议 16:9，自动虚化轮播，≤10MB）
+              <input type="file" accept="image/*" onChange={onPickBg} />
+            </label>
+            <ul className="qlist">
+              {bgs.map((b) => (
+                <li key={b.id}>
+                  <span className={b.active ? '' : 'muted'}>
+                    {b.active ? '▶ ' : ''}
+                    {b.file_path.split('/').pop()}
+                  </span>
+                  <span>
+                    <button className="mini-btn" onClick={() => void toggleBg(b)}>
+                      {b.active ? '停用' : '启用'}
+                    </button>
+                    <button className="mini-btn" onClick={() => void delBg(b)}>
+                      删除
+                    </button>
+                  </span>
+                </li>
+              ))}
+              {bgs.length === 0 && <li className="muted">暂无背景图，未上传时显示粒子动画</li>}
+            </ul>
           </div>
         </div>
       </div>

@@ -11,6 +11,8 @@ type Config struct {
 	RedisAddr       string
 	AdminPassword   string
 	QuestionSeconds int
+	QuizCount       int
+	UploadDir       string
 	Title           string
 }
 
@@ -21,6 +23,8 @@ func Load() Config {
 		RedisAddr:       getenv("REDIS_ADDR", "localhost:6379"),
 		AdminPassword:   getenv("ADMIN_PASSWORD", "admin123"),
 		QuestionSeconds: getenvInt("QUESTION_SECONDS", 20),
+		QuizCount:       getenvInt("QUESTION_COUNT", 10),
+		UploadDir:       getenv("UPLOAD_DIR", "uploads"),
 		Title:           getenv("APP_TITLE", "计算机协会 · 招新答题"),
 	}
 }

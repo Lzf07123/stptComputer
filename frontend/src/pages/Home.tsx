@@ -1,14 +1,45 @@
-import { lazy, Suspense } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { api } from '../api/client'
 
 const ParticlesBg = lazy(() => import('../components/ParticlesBg'))
 
 export default function Home() {
+  const [bgs, setBgs] = useState<string[]>([])
+  const [bgIdx, setBgIdx] = useState(0)
+
+  // 拉取后台配置的背景图；没有则回退粒子动画
+  useEffect(() => {
+    void api<{ backgrounds: string[] }>('/api/backgrounds')
+      .then((d) => setBgs((d.backgrounds || []).filter(Boolean)))
+      .catch(() => undefined)
+  }, [])
+
+  // 6s 轮换
+  useEffect(() => {
+    if (bgs.length <= 1) return
+    const t = window.setInterval(() => setBgIdx((i) => (i + 1) % bgs.length), 6000)
+    return () => clearInterval(t)
+  }, [bgs.length])
+
   return (
     <section className="home">
-      <Suspense fallback={<div className="particles-fallback" />}>
-        <ParticlesBg />
-      </Suspense>
+      {bgs.length > 0 ? (
+        <div className="bg-slideshow" aria-hidden="true">
+          {bgs.map((u, i) => (
+            <div
+              key={u}
+              className={`bg-slide${i === bgIdx ? ' on' : ''}`}
+              style={{ backgroundImage: `url(${u})` }}
+            />
+          ))}
+          <div className="bg-veil" />
+        </div>
+      ) : (
+        <Suspense fallback={<div className="particles-fallback" />}>
+          <ParticlesBg />
+        </Suspense>
+      )}
       <div className="home-inner">
         <p className="eyebrow fade-in">STPT-2026 · QUIZ CHALLENGE</p>
         <h1 className="fade-in d1">计算机协会</h1>

@@ -88,13 +88,18 @@ func orderedOptions(q store.Question, userID int64) []string {
 	return opts
 }
 
-func (s *Service) Questions(ctx context.Context, userID int64) ([]store.Question, error) {
+// Questions 按用户确定性随机抽取 limit 题（同用户刷新结果一致，保证断线恢复；
+// 不同用户抽到的题目不同；换身份重答也会换题）。
+func (s *Service) Questions(ctx context.Context, userID int64, limit int) ([]store.Question, error) {
 	qs, err := s.store.ListActiveQuestions(ctx)
 	if err != nil {
 		return nil, err
 	}
 	r := mathrand.New(mathrand.NewSource(userID*7919 + 13))
 	r.Shuffle(len(qs), func(i, j int) { qs[i], qs[j] = qs[j], qs[i] })
+	if limit > 0 && len(qs) > limit {
+		qs = qs[:limit]
+	}
 	for i := range qs {
 		qs[i].Options = orderedOptions(qs[i], userID)
 	}
@@ -226,6 +231,29 @@ func (s *Service) MyStats(ctx context.Context, userID int64) (*MyStats, error) {
 
 func (s *Service) Top(ctx context.Context, n int64) ([]rank.Entry, error) {
 	return s.rank.Top(ctx, n)
+}
+
+// ---------- backgrounds ----------
+
+func (s *Service) Backgrounds(ctx context.Context) ([]store.Background, error) {
+	return s.store.ListActiveBackgrounds(ctx)
+}
+
+func (s *Service) AllBackgrounds(ctx context.Context) ([]store.Background, error) {
+	return s.store.ListBackgrounds(ctx)
+}
+
+func (s *Service) AddBackground(ctx context.Context, filePath string) (*store.Background, error) {
+	return s.store.CreateBackground(ctx, filePath)
+}
+
+func (s *Service) SetBackgroundActive(ctx context.Context, id int64, active bool) error {
+	return s.store.SetBackgroundActive(ctx, id, active)
+}
+
+// DeleteBackground 删除记录并返回文件路径，供调用方清理磁盘文件。
+func (s *Service) DeleteBackground(ctx context.Context, id int64) (string, error) {
+	return s.store.DeleteBackground(ctx, id)
 }
 
 // ---------- state / qrcode / announce / effect ----------

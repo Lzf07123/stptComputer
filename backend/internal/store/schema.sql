@@ -47,3 +47,10 @@ CREATE TABLE IF NOT EXISTS quiz_state (
     state TEXT NOT NULL DEFAULT 'stop'
 );
 INSERT INTO quiz_state (id, state) VALUES (1, 'stop') ON CONFLICT (id) DO NOTHING;
+
+CREATE TABLE IF NOT EXISTS backgrounds (
+    id         BIGSERIAL PRIMARY KEY,
+    file_path  TEXT NOT NULL UNIQUE,
+    active     BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);

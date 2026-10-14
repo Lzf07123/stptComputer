@@ -26,7 +26,7 @@ docker compose -f deploy/docker-compose.yml up -d --build
 | `/quiz` | 答题（昵称领 token → 答题 → 成绩） |
 | `/result` | 个人成绩 + 实时 Top 10 |
 | `/screen` | 大屏投屏（实时排行 + 特效 + 公告） |
-| `/admin` | 后台管理 |
+| `/admin` | 后台管理（题库、公告、特效、二维码、**首页背景上传轮播**） |
 
 ## 关键 API
 

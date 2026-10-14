@@ -61,6 +61,13 @@ type Qrcode struct {
 	Active   bool
 }
 
+type Background struct {
+	ID        int64     `json:"id"`
+	FilePath  string    `json:"file_path"`
+	Active    bool      `json:"active"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
 type Announcement struct {
 	ID        int64
 	Content   string
@@ -303,6 +310,69 @@ func (s *Store) InsertAnnouncement(ctx context.Context, content, typ string) (*A
 		return nil, err
 	}
 	return a, nil
+}
+
+// ---------- backgrounds ----------
+
+func (s *Store) CreateBackground(ctx context.Context, filePath string) (*Background, error) {
+	b := &Background{FilePath: filePath, Active: true}
+	err := s.pool.QueryRow(ctx,
+		`INSERT INTO backgrounds (file_path) VALUES ($1) RETURNING id, active, created_at`,
+		filePath).Scan(&b.ID, &b.Active, &b.CreatedAt)
+	if err != nil {
+		return nil, err
+	}
+	return b, nil
+}
+
+func (s *Store) ListBackgrounds(ctx context.Context) ([]Background, error) {
+	return s.listBackgrounds(ctx, `SELECT id, file_path, active, created_at FROM backgrounds ORDER BY id DESC`)
+}
+
+func (s *Store) ListActiveBackgrounds(ctx context.Context) ([]Background, error) {
+	return s.listBackgrounds(ctx, `SELECT id, file_path, active, created_at FROM backgrounds WHERE active ORDER BY id DESC`)
+}
+
+func (s *Store) listBackgrounds(ctx context.Context, q string) ([]Background, error) {
+	rows, err := s.pool.Query(ctx, q)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []Background{}
+	for rows.Next() {
+		var b Background
+		if err := rows.Scan(&b.ID, &b.FilePath, &b.Active, &b.CreatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, b)
+	}
+	return out, rows.Err()
+}
+
+func (s *Store) SetBackgroundActive(ctx context.Context, id int64, active bool) error {
+	tag, err := s.pool.Exec(ctx, `UPDATE backgrounds SET active = $2 WHERE id = $1`, id, active)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// DeleteBackground 删除记录并返回文件路径，供调用方清理磁盘文件。
+func (s *Store) DeleteBackground(ctx context.Context, id int64) (string, error) {
+	var filePath string
+	err := s.pool.QueryRow(ctx,
+		`DELETE FROM backgrounds WHERE id = $1 RETURNING file_path`, id).Scan(&filePath)
+	if err != nil {
+		if err.Error() == "no rows in result set" {
+			return "", ErrNotFound
+		}
+		return "", err
+	}
+	return filePath, nil
 }
 
 func (s *Store) LatestAnnouncement(ctx context.Context) (*Announcement, error) {

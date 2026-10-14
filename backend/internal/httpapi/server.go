@@ -2,11 +2,16 @@ package httpapi
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/subtle"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -35,6 +40,7 @@ func (s *Server) Handler() http.Handler {
 	})
 
 	// 公开
+	mux.HandleFunc("GET /api/backgrounds", s.handleBackgrounds)
 	mux.HandleFunc("POST /api/session", s.handleSession)
 	mux.HandleFunc("GET /api/rank", s.handleRank)
 	mux.HandleFunc("GET /api/qrcode", s.handleQrcode)
@@ -56,6 +62,13 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/admin/questions", s.withAdmin(s.handleAdminListQuestions))
 	mux.HandleFunc("POST /api/admin/questions", s.withAdmin(s.handleAdminCreateQuestion))
 	mux.HandleFunc("POST /api/admin/questions/{id}/active", s.withAdmin(s.handleAdminSetActive))
+	mux.HandleFunc("POST /api/admin/backgrounds", s.withAdmin(s.handleAdminUploadBackground))
+	mux.HandleFunc("GET /api/admin/backgrounds", s.withAdmin(s.handleAdminListBackgrounds))
+	mux.HandleFunc("POST /api/admin/backgrounds/{id}/active", s.withAdmin(s.handleAdminSetBgActive))
+	mux.HandleFunc("DELETE /api/admin/backgrounds/{id}", s.withAdmin(s.handleAdminDeleteBackground))
+
+	// 上传文件静态服务（生产由 nginx 直出共享卷，此处兜底开发模式）
+	mux.Handle("GET /uploads/", http.StripPrefix("/uploads/", http.FileServer(http.Dir(s.cfg.UploadDir))))
 
 	return withCORS(mux)
 }
@@ -158,7 +171,11 @@ func (s *Server) handleSession(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleQuestions(w http.ResponseWriter, r *http.Request, u *store.User) {
-	qs, err := s.svc.Questions(r.Context(), u.ID)
+	limit := s.cfg.QuizCount
+	if limit <= 0 {
+		limit = 10
+	}
+	qs, err := s.svc.Questions(r.Context(), u.ID, limit)
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
@@ -368,4 +385,128 @@ func (s *Server) handleAdminSetActive(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"id": id, "active": req.Active})
+}
+
+// ---------- admin: backgrounds ----------
+
+func (s *Server) handleBackgrounds(w http.ResponseWriter, r *http.Request) {
+	bgs, err := s.svc.Backgrounds(r.Context())
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	urls := make([]string, 0, len(bgs))
+	for _, b := range bgs {
+		urls = append(urls, b.FilePath)
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"backgrounds": urls})
+}
+
+func (s *Server) handleAdminUploadBackground(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, 10<<20)
+	if err := r.ParseMultipartForm(10 << 20); err != nil {
+		writeErr(w, http.StatusBadRequest, "文件过大或格式错误（上限 10MB）")
+		return
+	}
+	file, _, err := r.FormFile("file")
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, "缺少 file 字段")
+		return
+	}
+	defer file.Close()
+
+	head := make([]byte, 512)
+	n, _ := file.Read(head)
+	ct := http.DetectContentType(head[:n])
+	ext := ""
+	switch ct {
+	case "image/jpeg":
+		ext = ".jpg"
+	case "image/png":
+		ext = ".png"
+	case "image/webp":
+		ext = ".webp"
+	case "image/gif":
+		ext = ".gif"
+	default:
+		writeErr(w, http.StatusBadRequest, "仅支持 JPG/PNG/WebP/GIF 图片")
+		return
+	}
+	if _, err := file.Seek(0, 0); err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if err := os.MkdirAll(s.cfg.UploadDir, 0o755); err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	name := fmt.Sprintf("bg-%d-%s%s", time.Now().UnixNano(), randHex(4), ext)
+	out, err := os.Create(filepath.Join(s.cfg.UploadDir, name))
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if _, err := io.Copy(out, file); err != nil {
+		out.Close()
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	out.Close()
+
+	bg, err := s.svc.AddBackground(r.Context(), "/uploads/"+name)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, bg)
+}
+
+func (s *Server) handleAdminListBackgrounds(w http.ResponseWriter, r *http.Request) {
+	bgs, err := s.svc.AllBackgrounds(r.Context())
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"backgrounds": bgs})
+}
+
+func (s *Server) handleAdminSetBgActive(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, "id 无效")
+		return
+	}
+	var req struct {
+		Active bool `json:"active"`
+	}
+	if err := readJSON(r, &req); err != nil {
+		writeErr(w, http.StatusBadRequest, "请求体格式错误")
+		return
+	}
+	if err := s.svc.SetBackgroundActive(r.Context(), id, req.Active); err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"id": id, "active": req.Active})
+}
+
+func (s *Server) handleAdminDeleteBackground(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, "id 无效")
+		return
+	}
+	filePath, err := s.svc.DeleteBackground(r.Context(), id)
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	_ = os.Remove(filepath.Join(s.cfg.UploadDir, filepath.Base(filePath)))
+	writeJSON(w, http.StatusOK, map[string]any{"id": id, "ok": "true"})
+}
+
+func randHex(n int) string {
+	b := make([]byte, n)
+	_, _ = rand.Read(b)
+	return hex.EncodeToString(b)
 }
