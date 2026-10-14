@@ -1,13 +1,15 @@
-# 基础镜像与软件源均可由构建参数/环境变量控制
+# 基础镜像与软件源可变；软件源统一由 SOURCE_MIRROR 控制（空=官方；cn=国内镜像组合）
 ARG NODE_IMAGE=node:20-alpine
 ARG NGINX_IMAGE=nginx:1.27-alpine
-ARG NPM_REGISTRY=https://registry.npmjs.org/
+ARG SOURCE_MIRROR=
 
 # ---- 前端构建 ----
 FROM ${NODE_IMAGE} AS fe
-ARG NPM_REGISTRY
+ARG SOURCE_MIRROR
 WORKDIR /fe
-RUN npm config set registry ${NPM_REGISTRY}
+RUN if [ "$SOURCE_MIRROR" = "cn" ]; then \
+        npm config set registry https://registry.npmmirror.com/; \
+    fi
 COPY frontend/package.json ./
 RUN npm install --no-audit --no-fund
 COPY frontend/ ./

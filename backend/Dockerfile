@@ -1,25 +1,25 @@
-# 基础镜像与软件源均可由构建参数/环境变量控制（默认官方源，国内可切镜像）
+# 基础镜像与软件源可变；软件源统一由 SOURCE_MIRROR 控制（空=官方；cn=国内镜像组合）
 ARG GOLANG_IMAGE=golang:1.22-alpine
 ARG ALPINE_IMAGE=alpine:3.20
-ARG GOPROXY=https://proxy.golang.org,direct
-ARG GOSUMDB=sum.golang.org
-ARG APK_MIRROR=
+ARG SOURCE_MIRROR=
 
 # ---- build ----
 FROM ${GOLANG_IMAGE} AS build
+ARG SOURCE_MIRROR
 WORKDIR /src
 COPY go.mod go.sum* ./
-ENV GOPROXY=${GOPROXY} \
-    GOSUMDB=${GOSUMDB}
+RUN if [ "$SOURCE_MIRROR" = "cn" ]; then \
+        go env -w GOPROXY=https://goproxy.cn,direct; \
+    fi
 RUN go mod download
 COPY . .
 RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/server ./cmd/server
 
 # ---- runtime ----
 FROM ${ALPINE_IMAGE}
-ARG APK_MIRROR
-RUN if [ -n "$APK_MIRROR" ]; then \
-        sed -i "s@dl-cdn.alpinelinux.org@${APK_MIRROR}@g" /etc/apk/repositories; \
+ARG SOURCE_MIRROR
+RUN if [ "$SOURCE_MIRROR" = "cn" ]; then \
+        sed -i "s@dl-cdn.alpinelinux.org@mirrors.aliyun.com@g" /etc/apk/repositories; \
     fi \
     && apk add --no-cache ca-certificates tzdata
 ENV TZ=Asia/Shanghai
