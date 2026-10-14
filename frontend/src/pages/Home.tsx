@@ -6,7 +6,6 @@ const ParticlesBg = lazy(() => import('../components/ParticlesBg'))
 
 export default function Home() {
   const [bgs, setBgs] = useState<string[]>([])
-  const [bgIdx, setBgIdx] = useState(0)
 
   // 拉取后台配置的背景图；没有则回退粒子动画
   useEffect(() => {
@@ -15,24 +14,27 @@ export default function Home() {
       .catch(() => undefined)
   }, [])
 
-  // 6s 轮换
-  useEffect(() => {
-    if (bgs.length <= 1) return
-    const t = window.setInterval(() => setBgIdx((i) => (i + 1) % bgs.length), 6000)
-    return () => clearInterval(t)
-  }, [bgs.length])
+  // 滚动轮播：轨道放两份图片实现无缝循环；
+  // 单张图静止；多张时按数量自适应（每张宽度至少占满 1/n 视口，速度随数量变慢）
+  const panelW = bgs.length > 0 ? `max(55vw, ${100 / bgs.length}vw)` : '55vw'
+  const duration = Math.max(bgs.length * 9, 24)
 
   return (
     <section className="home">
       {bgs.length > 0 ? (
-        <div className="bg-slideshow" aria-hidden="true">
-          {bgs.map((u, i) => (
-            <div
-              key={u}
-              className={`bg-slide${i === bgIdx ? ' on' : ''}`}
-              style={{ backgroundImage: `url(${u})` }}
-            />
-          ))}
+        <div className="bg-marquee" aria-hidden="true">
+          <div
+            className={`bg-track${bgs.length === 1 ? ' static' : ''}`}
+            style={{ animationDuration: `${duration}s` }}
+          >
+            {[...bgs, ...bgs].map((u, i) => (
+              <div
+                key={`${u}-${i}`}
+                className="bg-panel"
+                style={{ backgroundImage: `url(${u})`, width: panelW }}
+              />
+            ))}
+          </div>
           <div className="bg-veil" />
         </div>
       ) : (

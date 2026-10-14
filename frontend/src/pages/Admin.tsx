@@ -72,8 +72,11 @@ export default function Admin() {
         body: fd,
       })
       if (!res.ok) {
-        const b = await res.json().catch(() => ({ error: '上传失败' }))
-        throw new Error(b.error || '上传失败')
+        const b = await res.json().catch(() => ({ error: `HTTP ${res.status}` }))
+        const msg = b.error === `HTTP ${res.status}` && res.status === 413
+          ? '图片超过服务器大小限制，请压缩到 10MB 以内'
+          : (b.error || `HTTP ${res.status}`)
+        throw new Error(msg)
       }
       setMsg('✔ 背景已上传，首页将自动轮播')
       void reloadBgs()
