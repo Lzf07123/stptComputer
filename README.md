@@ -16,7 +16,7 @@
 ## 快速开始（全程 Docker，不污染本机）
 
 ```bash
-# 可选：先创建 .env 覆盖默认配置（不提供模板，变量见下表；不创建则用默认值）
+cp .env.example .env   # 可选：覆盖默认配置（变量见下表；模板仅占位值，不含真实配置）
 docker compose -f deploy/docker-compose.yml up -d --build
 ```
 
