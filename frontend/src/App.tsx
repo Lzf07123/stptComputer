@@ -10,8 +10,10 @@ export default function App() {
   const { pathname } = useLocation()
   const fullscreen = pathname === '/screen'
 
+  const isHome = pathname === '/'
+
   return (
-    <div className={`app${fullscreen ? ' fullscreen' : ''}`}>
+    <div className={`app${fullscreen ? ' fullscreen' : ''}${isHome ? ' route-home' : ''}`}>
       {!fullscreen && (
         <header className="topbar">
           <Link className="logo" to="/">计算机协会</Link>

@@ -117,7 +117,15 @@ body {
 }
 
 /* ---------- 首页 ---------- */
-.home { position: relative; min-height: 78vh; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+.home {
+  position: relative;
+  min-height: 100vh;
+  min-height: 100svh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
 #tsparticles, .particles-fallback { position: absolute; inset: 0; }
 .particles-fallback {
   background: radial-gradient(600px 300px at 50% 30%, rgba(34, 197, 94, 0.14), transparent);
@@ -317,12 +325,13 @@ input:focus, textarea:focus { outline: none; border-color: var(--blue); }
 }
 .mini-btn:hover { border-color: var(--green); }
 
-/* ---------- 首页背景滚动轮播（后台上传，虚化 + 无缝横向滚动） ---------- */
+/* ---------- 首页背景滚动轮播（后台上传，铺满整页 + 轻微虚化 + 无缝横向滚动） ---------- */
 .bg-marquee {
-  position: absolute;
-  inset: -4%;
+  position: fixed;
+  inset: -2%;
+  z-index: 0;
   overflow: hidden;
-  filter: blur(12px) brightness(0.55);
+  filter: blur(5px) brightness(0.85);
 }
 .bg-track {
   display: flex;
@@ -341,5 +350,35 @@ input:focus, textarea:focus { outline: none; border-color: var(--blue); }
   from { transform: translateX(0); }
   to   { transform: translateX(-50%); }
 }
-.bg-veil { position: absolute; inset: 0; background: rgba(15, 23, 42, 0.42); }
-.bg-marquee + .home-inner { position: relative; }
+.bg-veil { position: absolute; inset: 0; background: rgba(15, 23, 42, 0.38); }
+
+/* 首页路由：背景延伸到顶栏之下，页面无内边距，内容置顶于背景之上 */
+.route-home .topbar { background: transparent; border-bottom: none; position: relative; z-index: 2; }
+.route-home .page { padding: 0; }
+.home-inner { position: relative; z-index: 1; }
+
+/* ---------- 响应式适配 ---------- */
+@media (max-width: 640px) {
+  .topbar { padding: 10px 14px; flex-wrap: wrap; gap: 8px; }
+  .topbar nav { gap: 12px; }
+  .topbar nav a { font-size: 13px; }
+  .page { padding: 12px; }
+  .route-home .page { padding: 0; }
+  .home-inner { padding: 20px 16px; }
+  .home-inner h1 { letter-spacing: 3px; }
+  .subtitle { font-size: 15px; }
+  .home-actions { display: flex; flex-direction: column; align-items: center; margin-top: 28px; }
+  .home-actions .btn { width: min(280px, 82vw); margin: 8px 0; }
+  /* 手机竖屏：背景面板至少一屏宽，逐张滚动 */
+  .bg-panel { min-width: 100vw; }
+  .card { padding: 20px; margin: 10px auto; }
+  .quiz-wrap { padding: 0 4px; }
+  .question { font-size: 18px; }
+  .option { padding: 12px 14px; font-size: 15px; }
+  .name-form { max-width: 100%; }
+  .screen { padding: 20px 4vw; }
+  .screen-head { flex-direction: column; align-items: flex-start; gap: 12px; }
+  .srow { padding: 8px 12px; gap: 10px; }
+  .announce-banner { font-size: 16px; }
+  .admin-grid { grid-template-columns: 1fr; }
+}
