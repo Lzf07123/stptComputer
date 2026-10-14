@@ -289,6 +289,16 @@ func (s *Store) UserStats(ctx context.Context, userID int64) (*UserStats, error)
 	return st, nil
 }
 
+// AbandonRound 作废当前轮：删除该轮全部作答（身份与其他轮次保留）。
+func (s *Store) AbandonRound(ctx context.Context, userID int64, roundNo int) (int64, error) {
+	tag, err := s.pool.Exec(ctx,
+		`DELETE FROM attempts WHERE user_id = $1 AND round_no = $2`, userID, roundNo)
+	if err != nil {
+		return 0, err
+	}
+	return tag.RowsAffected(), nil
+}
+
 // ---------- rounds & best score ----------
 
 // NextRound 为用户开启新一轮（难度随轮持久化）并返回轮次号。

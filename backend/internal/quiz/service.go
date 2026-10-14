@@ -182,6 +182,24 @@ func (s *Service) drawQuestions(ctx context.Context, userID int64, roundNo int, 
 	return qs, nil
 }
 
+// AbandonRound 放弃本轮答题：作废本轮成绩，身份与历史最佳轮保留。
+func (s *Service) AbandonRound(ctx context.Context, userID int64) (int64, error) {
+	roundNo, err := s.store.CurrentRoundNo(ctx, userID)
+	if err != nil {
+		return 0, err
+	}
+	if roundNo == 0 {
+		return 0, ErrNoRound
+	}
+	deleted, err := s.store.AbandonRound(ctx, userID, roundNo)
+	if err != nil {
+		return 0, err
+	}
+	// 本轮可能是历史最佳，作废后按剩余轮次重算榜单
+	go s.refreshRank(context.WithoutCancel(ctx), userID)
+	return deleted, nil
+}
+
 // StartRound 开始新一轮：难度由用户答题前选择并随轮持久化。
 func (s *Service) StartRound(ctx context.Context, userID int64, difficulty string, limit int) (int, []store.Question, error) {
 	if !validDifficulty(difficulty) {

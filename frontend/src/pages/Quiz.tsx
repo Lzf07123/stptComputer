@@ -43,7 +43,7 @@ export default function Quiz() {
   const [boundNick, setBoundNick] = useState<string | null>(null)
   const [needsNewRound, setNeedsNewRound] = useState(false)
   const [difficulty, setDifficulty] = useState('全部')
-  const [abandonReq, setAbandonReq] = useState<{ byDevice: boolean; step: 'ask' | 'final' } | null>(null)
+  const [confirmReq, setConfirmReq] = useState<{ kind: 'identity' | 'round'; byDevice: boolean; step: 'ask' | 'final' } | null>(null)
   const locked = useRef(false)
   const sockRef = useRef<QuizSocket | null>(null)
   const nav = useNavigate()
@@ -247,13 +247,34 @@ export default function Quiz() {
   }
 
   // 二次确认入口
-  const requestAbandon = (byDevice: boolean) => setAbandonReq({ byDevice, step: 'ask' })
+  const requestAbandon = (byDevice: boolean) => setConfirmReq({ kind: 'identity', byDevice, step: 'ask' })
+  const requestAbandonRound = () => setConfirmReq({ kind: 'round', byDevice: false, step: 'ask' })
 
   const confirmAbandon = async () => {
-    if (!abandonReq) return
-    const byDevice = abandonReq.byDevice
-    setAbandonReq(null)
-    await abandonIdentity(byDevice)
+    if (!confirmReq) return
+    const req = confirmReq
+    setConfirmReq(null)
+    if (req.kind === 'identity') {
+      await abandonIdentity(req.byDevice)
+      return
+    }
+    // 放弃本轮：作废本轮成绩，身份与历史最佳保留
+    try {
+      await api('/api/quiz/round/abandon', { method: 'POST' })
+      sockRef.current?.close()
+      setQuestions([])
+      setIdx(0)
+      setFeedback(null)
+      setSelected(null)
+      locked.current = false
+      setFlash('本轮已放弃，可重新选择难度开始新一轮')
+      setError('')
+      setNeedsNewRound(true)
+      setPhase('name')
+    } catch (e) {
+      setError((e as Error).message)
+      setPhase('name')
+    }
   }
 
   // 放弃当前身份：解除设备绑定，本机可重新注册
@@ -385,8 +406,8 @@ export default function Quiz() {
             <button className="mini-exit" onClick={exitQuiz} title="保留身份与进度，返回首页">
               退出答题
             </button>
-            <button className="mini-quit" onClick={() => requestAbandon(false)}>
-              放弃身份
+            <button className="mini-quit" onClick={requestAbandonRound}>
+              放弃本轮
             </button>
           </span>
         </div>
@@ -432,6 +453,12 @@ export default function Quiz() {
         <button className="btn btn-primary" style={{ marginTop: 16 }} onClick={() => void startNewRound()}>
           开始本局答题
         </button>
+        <p style={{ marginTop: 14 }}>
+          <button className="mini-quit" onClick={() => requestAbandon(false)}>
+            放弃当前身份
+          </button>
+        </p>
+        {flash && <p className="flash">{flash}</p>}
         {error && <p className="error">{error}</p>}
       </section>
     )
@@ -495,24 +522,34 @@ export default function Quiz() {
   return (
     <>
       {body}
-      {abandonReq && (
-        <div className="modal-veil" onClick={() => setAbandonReq(null)}>
+      {confirmReq && (
+        <div className="modal-veil" onClick={() => setConfirmReq(null)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
-            {abandonReq.step === 'ask' ? (
+            {confirmReq.step === 'ask' ? (
               <>
-                <h3>放弃当前答题身份？</h3>
+                <h3>{confirmReq.kind === 'identity' ? '放弃当前答题身份？' : '放弃本轮答题？'}</h3>
                 <ul className="side-effects">
-                  <li>身份将<b>立即失效</b>，无法再登录或继续答题</li>
-                  <li>昵称「{myNick || boundNick || '当前身份'}」将<b>永久封存</b>，任何人（含本人）无法再次使用</li>
-                  <li>排行榜中的<b>历史记录保留</b>，将作为足迹继续展示</li>
-                  <li>历史答题保留，参与人次统计不受影响</li>
-                  <li>本机解除绑定，可重新注册<b>全新</b>身份</li>
+                  {confirmReq.kind === 'identity' ? (
+                    <>
+                      <li>身份将<b>立即失效</b>，无法再登录或继续答题</li>
+                      <li>昵称「{myNick || boundNick || '当前身份'}」将<b>永久封存</b>，任何人（含本人）无法再次使用</li>
+                      <li>排行榜中的<b>历史记录保留</b>，将作为足迹继续展示</li>
+                      <li>历史答题保留，参与人次统计不受影响</li>
+                      <li>本机解除绑定，可重新注册<b>全新</b>身份</li>
+                    </>
+                  ) : (
+                    <>
+                      <li>本轮已提交的答案将<b>全部作废</b>（不含历史轮次）</li>
+                      <li>身份与<b>历史最佳成绩保留</b>，排行榜不受影响</li>
+                      <li>放弃后可重新选择难度开始新一轮</li>
+                    </>
+                  )}
                 </ul>
                 <div className="modal-actions">
-                  <button className="btn" onClick={() => setAbandonReq(null)}>取消</button>
+                  <button className="btn" onClick={() => setConfirmReq(null)}>取消</button>
                   <button
                     className="btn btn-primary"
-                    onClick={() => setAbandonReq({ ...abandonReq, step: 'final' })}
+                    onClick={() => setConfirmReq({ ...confirmReq, step: 'final' })}
                   >
                     继续
                   </button>
@@ -522,11 +559,12 @@ export default function Quiz() {
               <>
                 <h3>最后确认</h3>
                 <p className="muted">
-                  放弃操作<b>不可撤销</b>：身份立即失效，昵称「{myNick || boundNick || '当前身份'}」永久不可再用。
-                  确定要放弃吗？
+                  {confirmReq.kind === 'identity'
+                    ? `放弃操作不可撤销：身份立即失效，昵称「${myNick || boundNick || '当前身份'}」永久不可再用。确定要放弃吗？`
+                    : '确认放弃本轮？本轮已提交的答案将被作废（历史最佳成绩不受影响）。'}
                 </p>
                 <div className="modal-actions">
-                  <button className="btn" onClick={() => setAbandonReq({ ...abandonReq, step: 'ask' })}>
+                  <button className="btn" onClick={() => setConfirmReq({ ...confirmReq, step: 'ask' })}>
                     返回
                   </button>
                   <button className="btn btn-primary" onClick={() => void confirmAbandon()}>

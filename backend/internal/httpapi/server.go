@@ -56,6 +56,7 @@ func (s *Server) Handler() http.Handler {
 
 	// 需 token
 	mux.HandleFunc("POST /api/quiz/round", s.withUser(s.handleStartRound))
+	mux.HandleFunc("POST /api/quiz/round/abandon", s.withUser(s.handleAbandonRound))
 	mux.HandleFunc("GET /api/quiz/current", s.withUser(s.handleCurrentRound))
 	mux.HandleFunc("POST /api/answer", s.withUser(s.handleAnswer))
 	mux.HandleFunc("GET /api/me", s.withUser(s.handleMe))
@@ -297,6 +298,15 @@ func (s *Server) handleStartRound(w http.ResponseWriter, r *http.Request, u *sto
 		"questions":        qs,
 		"question_seconds": s.cfg.QuestionSeconds,
 	})
+}
+
+func (s *Server) handleAbandonRound(w http.ResponseWriter, r *http.Request, u *store.User) {
+	deleted, err := s.svc.AbandonRound(r.Context(), u.ID)
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": "true", "deleted": deleted})
 }
 
 func (s *Server) handleCurrentRound(w http.ResponseWriter, r *http.Request, u *store.User) {
