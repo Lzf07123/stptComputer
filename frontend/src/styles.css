@@ -242,6 +242,8 @@ body {
 .bound-nick { font-size: 24px; font-weight: 700; color: var(--blue); margin: 6px 0 14px; }
 .bound-actions { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
 .diff-picker { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-top: 14px; }
+.newround-id { display: flex; gap: 10px; justify-content: center; align-items: center; flex-wrap: wrap; }
+.newround-id .id-tag { margin-left: 0; }
 .diff-opt {
   border: 2px solid var(--border);
   background: transparent;

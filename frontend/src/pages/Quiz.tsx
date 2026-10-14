@@ -453,7 +453,8 @@ export default function Quiz() {
         <button className="btn btn-primary" style={{ marginTop: 16 }} onClick={() => void startNewRound()}>
           开始本局答题
         </button>
-        <p style={{ marginTop: 14 }}>
+        <p className="newround-id" style={{ marginTop: 14 }}>
+          <span className="id-tag">当前身份：{myNick}</span>
           <button className="mini-quit" onClick={() => requestAbandon(false)}>
             放弃当前身份
           </button>
