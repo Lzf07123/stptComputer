@@ -59,9 +59,10 @@ type UserStats struct {
 }
 
 type Qrcode struct {
-	ID       int64
-	ImageURL string
-	Active   bool
+	ID       int64  `json:"id"`
+	Title    string `json:"title"`
+	ImageURL string `json:"image_url"`
+	Active   bool   `json:"active"`
 }
 
 type Background struct {
@@ -401,13 +402,40 @@ func (s *Store) SetQuizDifficulty(ctx context.Context, d string) error {
 
 // ---------- qrcode ----------
 
-func (s *Store) GetActiveQrcode(ctx context.Context) (*Qrcode, error) {
+// ListQrcodes 返回全部二维码（含停用，后台管理用）。
+func (s *Store) ListQrcodes(ctx context.Context) ([]Qrcode, error) {
+	return s.listQrcodes(ctx, `SELECT id, title, image_url, active FROM qrcodes ORDER BY id`)
+}
+
+// ListActiveQrcodes 返回全部启用中的二维码（前台「加入我们」页完整展示）。
+func (s *Store) ListActiveQrcodes(ctx context.Context) ([]Qrcode, error) {
+	return s.listQrcodes(ctx, `SELECT id, title, image_url, active FROM qrcodes WHERE active ORDER BY id`)
+}
+
+func (s *Store) listQrcodes(ctx context.Context, q string) ([]Qrcode, error) {
+	rows, err := s.pool.Query(ctx, q)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []Qrcode{}
+	for rows.Next() {
+		var qr Qrcode
+		if err := rows.Scan(&qr.ID, &qr.Title, &qr.ImageURL, &qr.Active); err != nil {
+			return nil, err
+		}
+		out = append(out, qr)
+	}
+	return out, rows.Err()
+}
+
+func (s *Store) GetQrcode(ctx context.Context, id int64) (*Qrcode, error) {
 	q := &Qrcode{}
 	err := s.pool.QueryRow(ctx,
-		`SELECT id, image_url, active FROM qrcodes WHERE active ORDER BY id DESC LIMIT 1`).
-		Scan(&q.ID, &q.ImageURL, &q.Active)
+		`SELECT id, title, image_url, active FROM qrcodes WHERE id = $1`, id).
+		Scan(&q.ID, &q.Title, &q.ImageURL, &q.Active)
 	if err != nil {
-		if err.Error() == "no rows in result set" {
+		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrNotFound
 		}
 		return nil, err
@@ -415,19 +443,43 @@ func (s *Store) GetActiveQrcode(ctx context.Context) (*Qrcode, error) {
 	return q, nil
 }
 
-func (s *Store) SetActiveQrcode(ctx context.Context, imageURL string) error {
-	tx, err := s.pool.Begin(ctx)
+// CreateQrcode 新增启用状态的二维码。
+func (s *Store) CreateQrcode(ctx context.Context, title, imageURL string) (*Qrcode, error) {
+	q := &Qrcode{Title: title, ImageURL: imageURL, Active: true}
+	err := s.pool.QueryRow(ctx,
+		`INSERT INTO qrcodes (title, image_url, active) VALUES ($1,$2,TRUE) RETURNING id, active`,
+		title, imageURL).Scan(&q.ID, &q.Active)
+	if err != nil {
+		return nil, err
+	}
+	return q, nil
+}
+
+func (s *Store) UpdateQrcode(ctx context.Context, id int64, title, imageURL string, active bool) error {
+	tag, err := s.pool.Exec(ctx,
+		`UPDATE qrcodes SET title = $2, image_url = $3, active = $4, updated_at = now() WHERE id = $1`,
+		id, title, imageURL, active)
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback(ctx)
-	if _, err := tx.Exec(ctx, `UPDATE qrcodes SET active = FALSE WHERE active`); err != nil {
-		return err
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
 	}
-	if _, err := tx.Exec(ctx, `INSERT INTO qrcodes (image_url, active) VALUES ($1, TRUE)`, imageURL); err != nil {
-		return err
+	return nil
+}
+
+// DeleteQrcode 删除记录并返回图片路径，供调用方清理磁盘文件。
+func (s *Store) DeleteQrcode(ctx context.Context, id int64) (string, error) {
+	var imageURL string
+	err := s.pool.QueryRow(ctx,
+		`DELETE FROM qrcodes WHERE id = $1 RETURNING image_url`, id).Scan(&imageURL)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return "", ErrNotFound
+		}
+		return "", err
 	}
-	return tx.Commit(ctx)
+	return imageURL, nil
 }
 
 // ---------- announcements ----------

@@ -47,9 +47,12 @@ CREATE INDEX IF NOT EXISTS idx_attempts_user ON attempts(user_id);
 CREATE TABLE IF NOT EXISTS qrcodes (
     id         BIGSERIAL PRIMARY KEY,
     image_url  TEXT NOT NULL,
+    title      TEXT NOT NULL DEFAULT '',
     active     BOOLEAN NOT NULL DEFAULT FALSE,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+-- 迁移：历史库补充「二维码下方标题」列
+ALTER TABLE qrcodes ADD COLUMN IF NOT EXISTS title TEXT NOT NULL DEFAULT '';
 
 CREATE TABLE IF NOT EXISTS announcements (
     id         BIGSERIAL PRIMARY KEY,

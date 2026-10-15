@@ -72,7 +72,10 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/admin/questions/template", s.withAdmin(s.handleAdminQuestionsTemplate))
 	mux.HandleFunc("POST /api/admin/announce", s.withAdmin(s.handleAdminAnnounce))
 	mux.HandleFunc("POST /api/admin/effect", s.withAdmin(s.handleAdminEffect))
-	mux.HandleFunc("POST /api/admin/qrcode", s.withAdmin(s.handleAdminQrcode))
+	mux.HandleFunc("GET /api/admin/qrcodes", s.withAdmin(s.handleAdminListQrcodes))
+	mux.HandleFunc("POST /api/admin/qrcodes", s.withAdmin(s.handleAdminAddQrcode))
+	mux.HandleFunc("POST /api/admin/qrcodes/{id}", s.withAdmin(s.handleAdminUpdateQrcode))
+	mux.HandleFunc("DELETE /api/admin/qrcodes/{id}", s.withAdmin(s.handleAdminDeleteQrcode))
 	mux.HandleFunc("GET /api/admin/questions", s.withAdmin(s.handleAdminListQuestions))
 	mux.HandleFunc("POST /api/admin/questions", s.withAdmin(s.handleAdminCreateQuestion))
 	mux.HandleFunc("DELETE /api/admin/questions", s.withAdmin(s.handleAdminClearQuestions))
@@ -402,16 +405,12 @@ func (s *Server) handleRank(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleQrcode(w http.ResponseWriter, r *http.Request) {
-	q, err := s.svc.Qrcode(r.Context())
+	qs, err := s.svc.Qrcodes(r.Context())
 	if err != nil {
-		if errors.Is(err, store.ErrNotFound) {
-			writeJSON(w, http.StatusOK, map[string]any{"image_url": "", "active": false})
-			return
-		}
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"image_url": q.ImageURL, "active": q.Active})
+	writeJSON(w, http.StatusOK, map[string]any{"qrcodes": qs})
 }
 
 func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
@@ -482,23 +481,74 @@ func (s *Server) handleAdminEffect(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"ok": "true", "kind": req.Kind})
 }
 
-func (s *Server) handleAdminQrcode(w http.ResponseWriter, r *http.Request) {
+// ---------- admin: qrcodes ----------
+
+func (s *Server) handleAdminListQrcodes(w http.ResponseWriter, r *http.Request) {
+	qs, err := s.svc.AllQrcodes(r.Context())
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"qrcodes": qs})
+}
+
+func (s *Server) handleAdminAddQrcode(w http.ResponseWriter, r *http.Request) {
+	url, ok := s.saveUploadedImage(w, r)
+	if !ok {
+		return
+	}
+	q, err := s.svc.AddQrcode(r.Context(), r.FormValue("title"), url)
+	if err != nil {
+		s.removeUploadFile(url)
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, q)
+}
+
+func (s *Server) handleAdminUpdateQrcode(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, "id 无效")
+		return
+	}
 	var req struct {
-		ImageURL string `json:"image_url"`
+		Title    *string `json:"title"`
+		ImageURL *string `json:"image_url"`
+		Active   *bool   `json:"active"`
 	}
 	if err := readJSON(r, &req); err != nil {
 		writeErr(w, http.StatusBadRequest, "请求体格式错误")
 		return
 	}
-	old, _ := s.svc.Qrcode(r.Context())
-	if err := s.svc.SetQrcode(r.Context(), req.ImageURL); err != nil {
+	oldImage, err := s.svc.UpdateQrcode(r.Context(), id, req.Title, req.ImageURL, req.Active)
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			writeErr(w, http.StatusNotFound, "二维码不存在")
+			return
+		}
 		writeErr(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	if old != nil {
-		s.removeUploadFile(old.ImageURL)
+	if oldImage != "" {
+		s.removeUploadFile(oldImage)
 	}
-	writeJSON(w, http.StatusOK, map[string]string{"ok": "true"})
+	writeJSON(w, http.StatusOK, map[string]any{"ok": "true"})
+}
+
+func (s *Server) handleAdminDeleteQrcode(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, "id 无效")
+		return
+	}
+	imageURL, err := s.svc.DeleteQrcode(r.Context(), id)
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	s.removeUploadFile(imageURL)
+	writeJSON(w, http.StatusOK, map[string]any{"id": id, "ok": "true"})
 }
 
 func (s *Server) handleAdminListQuestions(w http.ResponseWriter, r *http.Request) {

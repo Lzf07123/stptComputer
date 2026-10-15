@@ -122,7 +122,7 @@ export default function Home() {
         <p className="assoc-en fade-in d2">COMPUTER ASSOCIATION · STPT 2026</p>
         <p className="subtitle fade-in d2">招新答题挑战 · 实时排行 · 现场大奖</p>
         <div className="home-actions fade-in d3">
-          <Link className="btn btn-secondary" to="/join">加入群聊</Link>
+          <Link className="btn btn-secondary" to="/join">加入我们</Link>
           <Link className="btn btn-primary" to="/quiz">开始答题</Link>
         </div>
       </div>
