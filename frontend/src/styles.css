@@ -142,6 +142,9 @@ body {
 /* ---------- 计算机协会会徽 ---------- */
 .assoc-emblem {
   position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   width: 108px;
   height: 108px;
   margin: 0 auto 16px;
@@ -153,8 +156,8 @@ body {
   filter: drop-shadow(0 0 12px rgba(34, 211, 238, 0.55));
 }
 .assoc-emblem .emblem-img {
-  width: 100%;
-  height: 100%;
+  max-width: 100%;
+  max-height: 100%;
   object-fit: contain;
   display: block;
   filter: drop-shadow(0 0 12px rgba(34, 211, 238, 0.55));

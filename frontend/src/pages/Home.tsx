@@ -14,6 +14,32 @@ interface Motion {
   rows: number
 }
 
+// 上传的 Logo 按实际宽高自动适配：四角不越过旋转光环（内半径约 55px，可按比例撑到 100px 宽）。
+// 默认 78×78 为方形安全尺寸，图片加载完成后按真实宽高比调整。
+function EmblemLogo({ url }: { url: string }) {
+  const [size, setSize] = useState({ w: 78, h: 78 })
+  return (
+    <img
+      className="emblem-img"
+      src={url}
+      alt="计算机协会会徽"
+      style={{ width: size.w, height: size.h }}
+      onLoad={(e) => {
+        const { naturalWidth: nw, naturalHeight: nh } = e.currentTarget
+        if (!nw || !nh) return
+        const a = nw / nh
+        let h = Math.min(100, (2 * 55) / Math.sqrt(a * a + 1))
+        let w = a * h
+        if (w > 100) {
+          w = 100
+          h = 100 / a
+        }
+        setSize({ w: Math.round(w), h: Math.round(h) })
+      }}
+    />
+  )
+}
+
 export default function Home() {
   const logoURL = useLogoURL()
   const [bgs, setBgs] = useState<string[]>([])
@@ -101,7 +127,7 @@ export default function Home() {
       <div className="home-inner">
         <div className={`assoc-emblem fade-in${logoURL ? ' has-img' : ''}`} aria-hidden={logoURL ? undefined : 'true'}>
           {logoURL ? (
-            <img className="emblem-img" src={logoURL} alt="计算机协会会徽" />
+            <EmblemLogo url={logoURL} />
           ) : (
           <svg viewBox="0 0 96 96">
             <g stroke="#22d3ee" strokeWidth="3" fill="none">
