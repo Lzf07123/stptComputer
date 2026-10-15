@@ -6,9 +6,11 @@ import Result from './pages/Result'
 import Screen from './pages/Screen'
 import Admin from './pages/Admin'
 import Footer from './components/Footer'
+import { useLogoURL } from './api/site'
 
 function Layout() {
   const { pathname } = useLocation()
+  const logoURL = useLogoURL()
   const fullscreen = pathname === '/screen'
   const isHome = pathname === '/'
 
@@ -16,7 +18,9 @@ function Layout() {
     <div className={`app${fullscreen ? ' fullscreen' : ''}${isHome ? ' route-home' : ''}`}>
       {!fullscreen && (
         <header className="topbar">
-          <Link className="logo" to="/">计算机协会</Link>
+          <Link className={`logo${logoURL ? ' has-img' : ''}`} to="/">
+            {logoURL ? <img src={logoURL} alt="计算机协会" /> : '计算机协会'}
+          </Link>
           <nav>
             <Link to="/join">加入我们</Link>
             <Link to="/quiz">答题</Link>

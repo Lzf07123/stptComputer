@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api, getToken } from '../api/client'
+import { useLogoURL } from '../api/site'
 import { QuizSocket, wsURL } from '../ws/socket'
 
 interface Entry {
@@ -23,6 +24,7 @@ interface MyRank {
 }
 
 export default function Screen() {
+  const logoURL = useLogoURL()
   const [top, setTop] = useState<Entry[]>([])
   const [stats, setStats] = useState<Stats>({ participants: 0, attempts: 0, online: 0 })
   const [connected, setConnected] = useState(false)
@@ -88,7 +90,10 @@ export default function Screen() {
       <header className="screen-head">
         <div className="screen-title">
           <Link className="screen-home" to="/">← 返回首页</Link>
-          <h1>计算机协会 · 招新答题</h1>
+          <h1>
+            {logoURL && <img className="screen-logo" src={logoURL} alt="" />}
+            计算机协会 · 招新答题
+          </h1>
         </div>
         <div className="screen-status">
           <span className={`dot${connected ? ' on' : ''}`} />

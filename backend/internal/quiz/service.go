@@ -514,6 +514,22 @@ func (s *Service) SaveFooter(ctx context.Context, f *store.Footer) error {
 	return s.store.SaveFooterSettings(ctx, f)
 }
 
+// ---------- site ----------
+
+// Logo 返回站点 Logo 图片地址（空 = 前台使用内置样式）。
+func (s *Service) Logo(ctx context.Context) (string, error) {
+	return s.store.GetLogoURL(ctx)
+}
+
+// SaveLogo 保存站点 Logo 图片地址；空字符串表示恢复内置样式。
+func (s *Service) SaveLogo(ctx context.Context, url string) error {
+	url = strings.TrimSpace(url)
+	if len([]rune(url)) > 200 {
+		return ErrBadRequest
+	}
+	return s.store.SaveLogoURL(ctx, url)
+}
+
 // ---------- backgrounds ----------
 
 func (s *Service) Backgrounds(ctx context.Context) ([]store.Background, error) {
