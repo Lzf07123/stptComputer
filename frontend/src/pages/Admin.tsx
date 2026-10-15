@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState, type ChangeEvent } from 'react'
 import { api } from '../api/client'
+import { setFavicon } from '../api/site'
 
 interface Bg {
   id: number
@@ -348,7 +349,8 @@ export default function Admin() {
         body: JSON.stringify({ logo_url: url }),
       })
       setLogo(url)
-      setMsg(url ? '✔ Logo 已更新，前台刷新后生效' : '✔ 已恢复内置 Logo 样式')
+      setFavicon(url)
+      setMsg(url ? '✔ Logo 已更新，前台刷新后生效（favicon 已同步）' : '✔ 已恢复内置 Logo 样式')
     } catch (e) {
       setMsg(`✘ ${(e as Error).message}`)
     }
