@@ -228,11 +228,15 @@ body {
   padding: 16px;
   text-align: center;
 }
-.qr-grid { display: flex; flex-wrap: wrap; justify-content: center; gap: 22px; margin-top: 16px; }
-.qr-item { margin: 0; display: flex; flex-direction: column; align-items: center; }
-.qr-item .qrcode-img { margin-top: 0; }
+.qr-grid { display: flex; flex-wrap: wrap; justify-content: center; align-items: flex-start; gap: 18px 20px; margin-top: 16px; }
+/* 横向优先 + 尺寸范围：每张 150–320px（保证可扫），一行内等分拉伸，放不下才换行 */
+.qr-item {
+  margin: 0; display: flex; flex-direction: column; align-items: center;
+  flex: 1 1 150px; min-width: 150px; max-width: 320px;
+}
+.qr-item .qrcode-img { width: 100%; max-width: 100%; height: auto; margin-top: 0; }
 .qr-title {
-  margin-top: 10px; max-width: min(320px, 80vw); text-align: center;
+  margin-top: 10px; max-width: 100%; text-align: center;
   font-size: 15px; font-weight: 700; color: var(--text); letter-spacing: 1px; word-break: break-word;
 }
 
@@ -736,6 +740,7 @@ label.mini-btn { display: inline-flex; align-items: center; }
 
 /* ---------- 超窄屏（≤380px）：进一步收敛像素字体与排布 ---------- */
 @media (max-width: 380px) {
+  .qr-title { font-size: 14px; letter-spacing: 0.5px; }
   .home-inner h1 { letter-spacing: 2px; }
   .eyebrow { letter-spacing: 0.5px; }
   .assoc-en { letter-spacing: 0.5px; }
