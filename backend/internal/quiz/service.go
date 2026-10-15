@@ -553,15 +553,59 @@ func (s *Service) SetState(ctx context.Context, state string) error {
 	return s.publish(ctx, "quiz_state", map[string]any{"state": state})
 }
 
-func (s *Service) Qrcode(ctx context.Context) (*store.Qrcode, error) {
-	return s.store.GetActiveQrcode(ctx)
+// Qrcodes 返回前台「加入我们」页展示的启用二维码。
+func (s *Service) Qrcodes(ctx context.Context) ([]store.Qrcode, error) {
+	return s.store.ListActiveQrcodes(ctx)
 }
 
-func (s *Service) SetQrcode(ctx context.Context, imageURL string) error {
-	if strings.TrimSpace(imageURL) == "" {
-		return ErrBadRequest
+// AllQrcodes 返回全部二维码（后台管理）。
+func (s *Service) AllQrcodes(ctx context.Context) ([]store.Qrcode, error) {
+	return s.store.ListQrcodes(ctx)
+}
+
+// AddQrcode 新增二维码（默认启用，标题可为空）。
+func (s *Service) AddQrcode(ctx context.Context, title, imageURL string) (*store.Qrcode, error) {
+	title = strings.TrimSpace(title)
+	if strings.TrimSpace(imageURL) == "" || len([]rune(title)) > 30 {
+		return nil, ErrBadRequest
 	}
-	return s.store.SetActiveQrcode(ctx, imageURL)
+	return s.store.CreateQrcode(ctx, title, imageURL)
+}
+
+// UpdateQrcode 局部更新标题/图片/启用状态；图片被替换时返回旧路径供调用方清理。
+func (s *Service) UpdateQrcode(ctx context.Context, id int64, title, imageURL *string, active *bool) (string, error) {
+	q, err := s.store.GetQrcode(ctx, id)
+	if err != nil {
+		return "", err
+	}
+	newTitle, newImage, newActive := q.Title, q.ImageURL, q.Active
+	if title != nil {
+		newTitle = strings.TrimSpace(*title)
+		if len([]rune(newTitle)) > 30 {
+			return "", ErrBadRequest
+		}
+	}
+	if imageURL != nil {
+		newImage = strings.TrimSpace(*imageURL)
+		if newImage == "" {
+			return "", ErrBadRequest
+		}
+	}
+	if active != nil {
+		newActive = *active
+	}
+	if err := s.store.UpdateQrcode(ctx, id, newTitle, newImage, newActive); err != nil {
+		return "", err
+	}
+	if newImage != q.ImageURL {
+		return q.ImageURL, nil
+	}
+	return "", nil
+}
+
+// DeleteQrcode 删除二维码并返回图片路径供清理。
+func (s *Service) DeleteQrcode(ctx context.Context, id int64) (string, error) {
+	return s.store.DeleteQrcode(ctx, id)
 }
 
 func (s *Service) Announce(ctx context.Context, content, typ string) error {

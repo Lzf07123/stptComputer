@@ -199,7 +199,7 @@ body {
   to { opacity: 1; transform: translateY(0); }
 }
 
-/* ---------- 加群 ---------- */
+/* ---------- 加入我们（二维码） ---------- */
 .qrcode-img { max-width: min(320px, 80vw); border-radius: 8px; margin-top: 16px; border: 2px solid var(--border); }
 .qrcode-placeholder {
   margin: 20px auto;
@@ -213,6 +213,13 @@ body {
   color: var(--muted);
   padding: 16px;
   text-align: center;
+}
+.qr-grid { display: flex; flex-wrap: wrap; justify-content: center; gap: 22px; margin-top: 16px; }
+.qr-item { margin: 0; display: flex; flex-direction: column; align-items: center; }
+.qr-item .qrcode-img { margin-top: 0; }
+.qr-title {
+  margin-top: 10px; max-width: min(320px, 80vw); text-align: center;
+  font-size: 15px; font-weight: 700; color: var(--text); letter-spacing: 1px; word-break: break-word;
 }
 
 /* ---------- 答题 ---------- */
@@ -547,6 +554,16 @@ select {
 .mini-btn:hover { border-color: var(--green); }
 .mini-btn.danger { color: var(--red); border-color: var(--red); }
 .mini-btn.danger:hover { background: rgba(220, 38, 38, 0.12); }
+
+/* 后台：二维码管理（加入我们） */
+.qr-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.qr-row .thumb { margin-top: 0; height: 36px; }
+.qr-title-input {
+  width: 150px; min-width: 0; background: transparent; color: var(--text);
+  border: 2px solid var(--border); border-radius: 6px; padding: 5px 8px; font-size: 13px;
+}
+.qr-actions { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+label.mini-btn { display: inline-flex; align-items: center; }
 .qbank-head { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; }
 .qbank-head h3 { margin: 0; }
 
@@ -692,6 +709,10 @@ select {
   .admin .mini-btn { min-height: 40px; padding: 6px 14px; }
   .admin input, .admin select, .admin textarea { font-size: 16px; } /* 防 iOS 聚焦缩放 */
   .qlist { max-height: 300px; }
+  .qlist li { flex-wrap: wrap; }
+  .qr-row { flex: 1 1 100%; }
+  .qr-title-input { width: 100%; }
+  .qr-actions { justify-content: flex-start; }
 }
 
 /* ---------- 超窄屏（≤380px）：进一步收敛像素字体与排布 ---------- */

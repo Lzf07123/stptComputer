@@ -18,7 +18,7 @@ function Layout() {
         <header className="topbar">
           <Link className="logo" to="/">计算机协会</Link>
           <nav>
-            <Link to="/join">加群</Link>
+            <Link to="/join">加入我们</Link>
             <Link to="/quiz">答题</Link>
             <Link to="/screen">排行榜</Link>
           </nav>

@@ -55,7 +55,7 @@ export default function Footer() {
           )}
         </div>
         <span className="footer-links">
-          <Link to="/join">加入群聊</Link>
+          <Link to="/join">加入我们</Link>
           <Link to="/screen">排行榜</Link>
         </span>
       </div>

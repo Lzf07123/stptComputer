@@ -7,6 +7,13 @@ interface Bg {
   active: boolean
 }
 
+interface Qr {
+  id: number
+  title: string
+  image_url: string
+  active: boolean
+}
+
 interface Question {
   id: number
   content: string
@@ -50,7 +57,9 @@ export default function Admin() {
   const [bgs, setBgs] = useState<Bg[]>([])
   const [uploading, setUploading] = useState(false)
   const [footer, setFooter] = useState({ owner: '', license: '', icp: '', icp_icon: '', police: '', police_icon: '' })
-  const [qrNow, setQrNow] = useState('')
+  const [qrs, setQrs] = useState<Qr[]>([])
+  const [qrNewTitle, setQrNewTitle] = useState('')
+  const [qrTitles, setQrTitles] = useState<Record<number, string>>({})
 
   const adminHeaders = useCallback(
     () => ({ 'X-Admin-Token': pass }),
@@ -136,14 +145,16 @@ export default function Admin() {
     }
   }, [adminHeaders])
 
-  const reloadQr = useCallback(async () => {
+  const reloadQrs = useCallback(async () => {
     try {
-      const d = await api<{ image_url: string }>('/api/qrcode')
-      setQrNow(d.image_url || '')
+      const d = await api<{ qrcodes: Qr[] }>('/api/admin/qrcodes', { headers: adminHeaders() })
+      const list = d.qrcodes || []
+      setQrs(list)
+      setQrTitles(Object.fromEntries(list.map((q) => [q.id, q.title])))
     } catch {
       /* 忽略 */
     }
-  }, [])
+  }, [adminHeaders])
 
   const reloadFooter = useCallback(async () => {
     try {
@@ -159,11 +170,11 @@ export default function Admin() {
       void reload()
       void reloadBgs()
       void reloadFooter()
-      void reloadQr()
+      void reloadQrs()
     }
-  }, [pass, verified, reload, reloadBgs, reloadFooter, reloadQr])
+  }, [pass, verified, reload, reloadBgs, reloadFooter, reloadQrs])
 
-  // 上传到 /uploads 并返回 URL（群二维码、备案图标等）
+  // 上传到 /uploads 并返回 URL（二维码换图、备案图标等）
   const uploadImage = async (f: File): Promise<string> => {
     const fd = new FormData()
     fd.append('file', f)
@@ -236,6 +247,82 @@ export default function Admin() {
       await api(`/api/admin/backgrounds/${b.id}`, { method: 'DELETE', headers: adminHeaders() })
       setMsg('✔ 背景已删除')
       void reloadBgs()
+    } catch (e) {
+      setMsg(`✘ ${(e as Error).message}`)
+    }
+  }
+
+  // 二维码（加入我们）：新增 / 改标题 / 换图 / 停启用 / 删除
+  const addQr = async (f: File) => {
+    const fd = new FormData()
+    fd.append('file', f)
+    fd.append('title', qrNewTitle)
+    try {
+      const res = await fetch('/api/admin/qrcodes', {
+        method: 'POST',
+        headers: { 'X-Admin-Token': pass },
+        body: fd,
+      })
+      if (!res.ok) {
+        const b = await res.json().catch(() => ({ error: `HTTP ${res.status}` }))
+        throw new Error(b.error || `HTTP ${res.status}`)
+      }
+      setQrNewTitle('')
+      setMsg('✔ 二维码已新增并默认启用，前台 30 秒内生效')
+      void reloadQrs()
+    } catch (e) {
+      setMsg(`✘ ${(e as Error).message}`)
+    }
+  }
+
+  const saveQrTitle = async (q: Qr) => {
+    try {
+      await api(`/api/admin/qrcodes/${q.id}`, {
+        method: 'POST',
+        headers: adminHeaders(),
+        body: JSON.stringify({ title: qrTitles[q.id] ?? '' }),
+      })
+      setMsg('✔ 标题已保存')
+      void reloadQrs()
+    } catch (e) {
+      setMsg(`✘ ${(e as Error).message}`)
+    }
+  }
+
+  const replaceQrImage = async (q: Qr, f: File) => {
+    try {
+      const url = await uploadImage(f)
+      await api(`/api/admin/qrcodes/${q.id}`, {
+        method: 'POST',
+        headers: adminHeaders(),
+        body: JSON.stringify({ image_url: url }),
+      })
+      setMsg('✔ 二维码图片已更换')
+      void reloadQrs()
+    } catch (e) {
+      setMsg(`✘ ${(e as Error).message}`)
+    }
+  }
+
+  const toggleQr = async (q: Qr) => {
+    try {
+      await api(`/api/admin/qrcodes/${q.id}`, {
+        method: 'POST',
+        headers: adminHeaders(),
+        body: JSON.stringify({ active: !q.active }),
+      })
+      setMsg(`✔ ${q.active ? '二维码已停用' : '二维码已启用'}`)
+      void reloadQrs()
+    } catch (e) {
+      setMsg(`✘ ${(e as Error).message}`)
+    }
+  }
+
+  const delQr = async (q: Qr) => {
+    try {
+      await api(`/api/admin/qrcodes/${q.id}`, { method: 'DELETE', headers: adminHeaders() })
+      setMsg('✔ 二维码已删除')
+      void reloadQrs()
     } catch (e) {
       setMsg(`✘ ${(e as Error).message}`)
     }
@@ -445,30 +532,70 @@ export default function Admin() {
           </div>
 
           <div className="admin-panel">
-            <h3>群二维码</h3>
+            <h3>加入我们 · 二维码</h3>
+            <p className="muted">标题展示在二维码下方；启用中的二维码会全部出现在「加入我们」页。</p>
             <label className="field">
-              上传新二维码图片（替换当前展示）
+              新增标题（可留空，最多 30 字）
+              <input
+                value={qrNewTitle}
+                maxLength={30}
+                placeholder="如：招新群① / QQ群 / 公众号"
+                onChange={(e) => setQrNewTitle(e.target.value)}
+              />
+            </label>
+            <label className="field">
+              上传图片（新增一条，默认启用）
               <input
                 type="file"
                 accept="image/*"
-                onChange={async (e) => {
+                onChange={(e) => {
                   const f = e.target.files && e.target.files[0]
-                  if (!f) return
-                  try {
-                    const url = await uploadImage(f)
-                    await act('/api/admin/qrcode', { image_url: url }, '已切换群二维码')
-                    void reloadQr()
-                  } catch (err) {
-                    setMsg(`✘ ${(err as Error).message}`)
-                  }
+                  e.target.value = ''
+                  if (f) void addQr(f)
                 }}
               />
             </label>
-            {qrNow ? (
-              <img className="thumb big" src={qrNow} alt="当前群二维码" />
-            ) : (
-              <p className="muted">尚未上传群二维码</p>
-            )}
+            <ul className="qlist">
+              {qrs.map((q) => (
+                <li key={q.id}>
+                  <span className="qr-row">
+                    <img className="thumb" src={q.image_url} alt="" />
+                    <input
+                      className="qr-title-input"
+                      value={qrTitles[q.id] ?? ''}
+                      maxLength={30}
+                      placeholder="标题（可留空）"
+                      onChange={(e) => setQrTitles({ ...qrTitles, [q.id]: e.target.value })}
+                    />
+                  </span>
+                  <span className="qr-actions">
+                    <button className="mini-btn" onClick={() => void saveQrTitle(q)}>
+                      保存标题
+                    </button>
+                    <label className="mini-btn">
+                      换图
+                      <input
+                        type="file"
+                        accept="image/*"
+                        hidden
+                        onChange={(e) => {
+                          const f = e.target.files && e.target.files[0]
+                          e.target.value = ''
+                          if (f) void replaceQrImage(q, f)
+                        }}
+                      />
+                    </label>
+                    <button className="mini-btn" onClick={() => void toggleQr(q)}>
+                      {q.active ? '停用' : '启用'}
+                    </button>
+                    <button className="mini-btn danger" onClick={() => void delQr(q)}>
+                      删除
+                    </button>
+                  </span>
+                </li>
+              ))}
+              {qrs.length === 0 && <li className="muted">暂无二维码，上传后「加入我们」页即可扫码</li>}
+            </ul>
           </div>
 
           <div className="admin-panel">
