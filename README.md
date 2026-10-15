@@ -122,4 +122,4 @@ docker compose -p stpt-loadtest -f deploy/docker-compose.yml down -v
 
 ## License
 
-MIT © 计算机协会 · 汕头职业技术学院
+[MIT](LICENSE) © 2026 黎智锋（Li Zhifeng）
