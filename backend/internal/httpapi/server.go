@@ -88,6 +88,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/admin/uploads", s.withAdmin(s.handleAdminUpload))
 	mux.HandleFunc("GET /api/admin/footer", s.withAdmin(s.handleAdminGetFooter))
 	mux.HandleFunc("POST /api/admin/footer", s.withAdmin(s.handleAdminSaveFooter))
+	mux.HandleFunc("GET /api/admin/logo", s.withAdmin(s.handleAdminGetLogo))
+	mux.HandleFunc("POST /api/admin/logo", s.withAdmin(s.handleAdminSaveLogo))
 
 	// 上传文件静态服务（生产由 nginx 直出共享卷，此处兜底开发模式）
 	mux.Handle("GET /uploads/", http.StripPrefix("/uploads/", http.FileServer(http.Dir(s.cfg.UploadDir))))
@@ -427,12 +429,17 @@ func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		footer = &store.Footer{}
 	}
+	logoURL, err := s.svc.Logo(r.Context())
+	if err != nil {
+		logoURL = ""
+	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"title":            s.svc.Title(),
 		"quiz_state":       state,
 		"question_seconds": s.cfg.QuestionSeconds,
 		"announcement":     announce,
 		"footer":           footer,
+		"logo_url":         logoURL,
 	})
 }
 
@@ -963,4 +970,35 @@ func (s *Server) handleAdminSaveFooter(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"ok": "true"})
+}
+
+// ---------- admin: logo ----------
+
+func (s *Server) handleAdminGetLogo(w http.ResponseWriter, r *http.Request) {
+	url, err := s.svc.Logo(r.Context())
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"logo_url": url})
+}
+
+func (s *Server) handleAdminSaveLogo(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		LogoURL string `json:"logo_url"`
+	}
+	if err := readJSON(r, &req); err != nil {
+		writeErr(w, http.StatusBadRequest, "请求体格式错误")
+		return
+	}
+	url := strings.TrimSpace(req.LogoURL)
+	old, _ := s.svc.Logo(r.Context())
+	if err := s.svc.SaveLogo(r.Context(), url); err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if old != "" && old != url {
+		s.removeUploadFile(old)
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": "true", "logo_url": url})
 }

@@ -2,6 +2,7 @@ import { lazy, Suspense, useCallback, useEffect, useRef, useState, type CSSPrope
 import { Link } from 'react-router-dom'
 import { api } from '../api/client'
 import TechParticles from '../components/TechParticles'
+import { useLogoURL } from '../api/site'
 
 const ParticlesBg = lazy(() => import('../components/ParticlesBg'))
 
@@ -14,6 +15,7 @@ interface Motion {
 }
 
 export default function Home() {
+  const logoURL = useLogoURL()
   const [bgs, setBgs] = useState<string[]>([])
   const stripRef = useRef<HTMLDivElement>(null)
   const [motion, setMotion] = useState<Motion>({ copies: 1, stripW: 0, dur: 24, scroll: false, rows: 3 })
@@ -97,7 +99,10 @@ export default function Home() {
       </div>
       <div className="bg-veil" />
       <div className="home-inner">
-        <div className="assoc-emblem fade-in" aria-hidden="true">
+        <div className={`assoc-emblem fade-in${logoURL ? ' has-img' : ''}`} aria-hidden={logoURL ? undefined : 'true'}>
+          {logoURL ? (
+            <img className="emblem-img" src={logoURL} alt="计算机协会会徽" />
+          ) : (
           <svg viewBox="0 0 96 96">
             <g stroke="#22d3ee" strokeWidth="3" fill="none">
               <rect x="18" y="18" width="60" height="60" />
@@ -115,6 +120,7 @@ export default function Home() {
               CA
             </text>
           </svg>
+          )}
           <span className="emblem-ring" />
         </div>
         <p className="eyebrow fade-in d1">汕头职业技术学院 · 计算机协会</p>

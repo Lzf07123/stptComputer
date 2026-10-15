@@ -710,6 +710,36 @@ func (s *Store) SaveFooterSettings(ctx context.Context, f *Footer) error {
 	return err
 }
 
+// ---------- site ----------
+
+// EnsureSiteSettings 首次启动时创建单行站点设置。
+func (s *Store) EnsureSiteSettings(ctx context.Context) error {
+	_, err := s.pool.Exec(ctx,
+		`INSERT INTO site_settings (id) VALUES (1) ON CONFLICT (id) DO NOTHING`)
+	return err
+}
+
+// GetLogoURL 返回站点 Logo 地址；未配置时为空字符串（前台使用内置样式）。
+func (s *Store) GetLogoURL(ctx context.Context) (string, error) {
+	var url string
+	err := s.pool.QueryRow(ctx, `SELECT logo_url FROM site_settings WHERE id = 1`).Scan(&url)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return "", nil
+		}
+		return "", err
+	}
+	return url, nil
+}
+
+// SaveLogoURL 保存站点 Logo 地址（空字符串 = 恢复内置样式）。
+func (s *Store) SaveLogoURL(ctx context.Context, url string) error {
+	_, err := s.pool.Exec(ctx,
+		`INSERT INTO site_settings (id, logo_url, updated_at) VALUES (1, $1, now())
+		ON CONFLICT (id) DO UPDATE SET logo_url = EXCLUDED.logo_url, updated_at = now()`, url)
+	return err
+}
+
 // ---------- backgrounds ----------
 
 func (s *Store) CreateBackground(ctx context.Context, filePath string) (*Background, error) {

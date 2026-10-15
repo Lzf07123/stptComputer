@@ -45,11 +45,15 @@ body {
   background: rgba(15, 23, 42, 0.7);
 }
 .topbar .logo {
+  display: inline-flex;
+  align-items: center;
   font-weight: 800;
   color: var(--text);
   text-decoration: none;
   letter-spacing: 2px;
 }
+.topbar .logo img { height: 26px; width: auto; display: block; }
+.topbar .logo.has-img::before { display: none; }
 .topbar .logo::before {
   content: '';
   display: inline-block;
@@ -145,6 +149,13 @@ body {
 .assoc-emblem svg {
   width: 100%;
   height: 100%;
+  display: block;
+  filter: drop-shadow(0 0 12px rgba(34, 211, 238, 0.55));
+}
+.assoc-emblem .emblem-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
   display: block;
   filter: drop-shadow(0 0 12px rgba(34, 211, 238, 0.55));
 }
@@ -405,6 +416,7 @@ select {
 }
 .screen-head { display: flex; justify-content: space-between; align-items: center; }
 .screen-title { display: flex; flex-direction: column; gap: 8px; }
+.screen-logo { height: 34px; width: auto; vertical-align: middle; margin-right: 10px; }
 .screen-home {
   align-self: flex-start;
   display: inline-flex;
@@ -508,6 +520,10 @@ select {
 .beian img { height: 14px; width: auto; display: inline-block; }
 .thumb { height: 28px; width: auto; border-radius: 4px; margin-top: 6px; display: block; }
 .thumb.big { height: 120px; }
+.logo-preview {
+  max-width: 220px; height: 96px; object-fit: contain;
+  background: rgba(148, 163, 184, 0.08); border-radius: 8px; padding: 8px;
+}
 .footer-links { display: flex; gap: 16px; }
 .footer-links a { color: var(--muted); text-decoration: none; }
 .footer-links a:hover { color: var(--green); }

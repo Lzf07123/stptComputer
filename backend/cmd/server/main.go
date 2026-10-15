@@ -41,6 +41,10 @@ func main() {
 		log.Fatalf("footer defaults: %v", err)
 	}
 
+	if err := st.EnsureSiteSettings(ctx); err != nil {
+		log.Fatalf("site defaults: %v", err)
+	}
+
 	svc := quiz.New(st, rk, pub, cfg.Title)
 	svc.StartLeaderboardRefresh(ctx)
 	hub := ws.NewHub(svc, pub.Subscribe(ctx)) // 排行榜改走 DB 全量排名

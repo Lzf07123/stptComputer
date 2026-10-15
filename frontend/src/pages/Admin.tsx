@@ -60,6 +60,7 @@ export default function Admin() {
   const [qrs, setQrs] = useState<Qr[]>([])
   const [qrNewTitle, setQrNewTitle] = useState('')
   const [qrTitles, setQrTitles] = useState<Record<number, string>>({})
+  const [logo, setLogo] = useState('')
 
   const adminHeaders = useCallback(
     () => ({ 'X-Admin-Token': pass }),
@@ -156,6 +157,15 @@ export default function Admin() {
     }
   }, [adminHeaders])
 
+  const reloadLogo = useCallback(async () => {
+    try {
+      const d = await api<{ logo_url: string }>('/api/admin/logo', { headers: adminHeaders() })
+      setLogo(d.logo_url || '')
+    } catch {
+      /* 忽略 */
+    }
+  }, [adminHeaders])
+
   const reloadFooter = useCallback(async () => {
     try {
       const d = await api<{ footer: { owner: string; license: string; icp: string; icp_icon: string; police: string; police_icon: string } }>('/api/admin/footer', { headers: adminHeaders() })
@@ -171,8 +181,9 @@ export default function Admin() {
       void reloadBgs()
       void reloadFooter()
       void reloadQrs()
+      void reloadLogo()
     }
-  }, [pass, verified, reload, reloadBgs, reloadFooter, reloadQrs])
+  }, [pass, verified, reload, reloadBgs, reloadFooter, reloadQrs, reloadLogo])
 
   // 上传到 /uploads 并返回 URL（二维码换图、备案图标等）
   const uploadImage = async (f: File): Promise<string> => {
@@ -323,6 +334,21 @@ export default function Admin() {
       await api(`/api/admin/qrcodes/${q.id}`, { method: 'DELETE', headers: adminHeaders() })
       setMsg('✔ 二维码已删除')
       void reloadQrs()
+    } catch (e) {
+      setMsg(`✘ ${(e as Error).message}`)
+    }
+  }
+
+  // 站点 Logo：上传即保存；可一键恢复内置样式
+  const saveLogo = async (url: string) => {
+    try {
+      await api('/api/admin/logo', {
+        method: 'POST',
+        headers: adminHeaders(),
+        body: JSON.stringify({ logo_url: url }),
+      })
+      setLogo(url)
+      setMsg(url ? '✔ Logo 已更新，前台刷新后生效' : '✔ 已恢复内置 Logo 样式')
     } catch (e) {
       setMsg(`✘ ${(e as Error).message}`)
     }
@@ -616,6 +642,39 @@ export default function Admin() {
       {tab === 'appearance' && (
         <div className="card">
           <div className="admin-grid">
+          <div className="admin-panel">
+            <h3>站点 Logo</h3>
+            <p className="muted">显示在顶栏、首页会徽与大屏标题；未上传时使用内置样式。</p>
+            <label className="field">
+              上传 Logo（PNG/JPG/WebP/GIF，建议透明背景、方形）
+              <input
+                type="file"
+                accept="image/*"
+                onChange={async (e) => {
+                  const f = e.target.files && e.target.files[0]
+                  e.target.value = ''
+                  if (!f) return
+                  try {
+                    const url = await uploadImage(f)
+                    await saveLogo(url)
+                  } catch (err) {
+                    setMsg(`✘ ${(err as Error).message}`)
+                  }
+                }}
+              />
+            </label>
+            {logo ? (
+              <>
+                <img className="thumb big logo-preview" src={logo} alt="当前 Logo" />
+                <button className="btn" onClick={() => void saveLogo('')}>
+                  恢复内置 Logo
+                </button>
+              </>
+            ) : (
+              <p className="muted">当前使用内置 Logo</p>
+            )}
+          </div>
+
           <div className="admin-panel">
             <h3>页脚信息</h3>
             <label className="field">
